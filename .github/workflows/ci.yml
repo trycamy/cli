@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1" # weekly: catch installer drift even with no commits
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    name: Installer lint and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # scripts/install.sh is what `curl | sh` executes on a stranger's
+      # machine. Check it under plain sh, dash (Debian's /bin/sh, stricter
+      # than bash), and shellcheck.
+      - name: Lint
+        run: |
+          set -euo pipefail
+          if ! command -v dash >/dev/null || ! command -v shellcheck >/dev/null; then
+            sudo apt-get update -qq
+            command -v dash >/dev/null || sudo apt-get install -y -qq dash
+            command -v shellcheck >/dev/null || sudo apt-get install -y -qq shellcheck
+          fi
+          sh -n scripts/install.sh
+          sh -n scripts/install_test.sh
+          dash -n scripts/install.sh
+          dash -n scripts/install_test.sh
+          shellcheck -s sh scripts/install.sh scripts/install_test.sh
+
+      # End-to-end against a fake release channel served on 127.0.0.1:
+      # checksum verification, atomic same-directory rename, version-shape
+      # gate, PATH wiring. No real network egress.
+      - name: Test
+        run: sh scripts/install_test.sh
+
+  drift:
+    name: Installer matches the release channel
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The installer people actually run is served from dl.camy.sh. This
+      # repo mirrors it so it can be read and reviewed; the two must never
+      # silently differ. Publish to the channel first, then update the mirror.
+      - name: Diff against https://dl.camy.sh/install
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --retry-delay 2 --proto '=https' --tlsv1.2 \
+            https://dl.camy.sh/install -o "$RUNNER_TEMP/live-install.sh"
+          diff -u "$RUNNER_TEMP/live-install.sh" scripts/install.sh
+
+  docs:
+    name: Docs links
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Relative links resolve
+        run: python3 scripts/check-docs.py

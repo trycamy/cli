@@ -1,0 +1,4 @@
+.DS_Store
+
+# iCloud Drive conflict copies ("name 2.md"); never content
+* [0-9].*

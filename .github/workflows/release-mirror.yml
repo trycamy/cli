@@ -1,0 +1,113 @@
+name: Mirror release
+
+# camy is built, signed, and published to the release channel
+# (https://dl.camy.sh/stable/) by a private pipeline. This workflow turns each
+# published version into a GitHub Release here, with the same assets, after
+# verifying them: every tarball against the version-scoped SHA256SUMS, and
+# that manifest against its cosign signature with the signing workflow's
+# identity pinned (the same check docs/verifying-releases.md shows). It runs
+# with this repository's own token and uploads nothing it could not verify.
+# Release notes come from CHANGELOG.md; a version whose heading still says
+# "unreleased" is skipped until the notes and the date are written.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to mirror (default: the channel's current VERSION)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mirror-release
+  cancel-in-progress: false
+
+env:
+  CHANNEL: https://dl.camy.sh/stable
+  # The workflow that signs releases lives in the private source repository.
+  SIGNER: '^https://github\.com/CamyAI/camy-cli/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve the version
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+          v="${INPUT:-$(curl -fsSL --retry 3 --proto '=https' --tlsv1.2 "$CHANNEL/VERSION" | tr -cd '0-9A-Za-z.-')}"
+          case "$v" in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "::error::unexpected VERSION '$v'"; exit 1 ;; esac
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          heading=$(grep -E "^## ${v//./\\.}( |$)" CHANGELOG.md || true)
+          if [ -z "$heading" ]; then
+            echo "::notice::$v has no CHANGELOG.md section, so it is not a public release; nothing to do"; exit 0
+          fi
+          case "$heading" in
+            *nreleased*) echo "::notice::CHANGELOG.md still marks $v unreleased; write the notes and the date, then re-run"; exit 0 ;;
+          esac
+          if gh release view "v$v" >/dev/null 2>&1; then echo "::notice::v$v is already released"; exit 0; fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        if: steps.v.outputs.skip == 'false'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Download and verify
+        if: steps.v.outputs.skip == 'false'
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p assets && cd assets
+          get() { curl -fsSL --retry 3 --retry-delay 2 --proto '=https' --tlsv1.2 -O "$CHANNEL/$1"; }
+          get "SHA256SUMS-$V"; get "SHA256SUMS-$V.sig"; get "SHA256SUMS-$V.pem"
+          get "SHA256SUMS-$V.minisig" || echo "::warning::no minisign signature published for $V"
+          cosign verify-blob \
+            --certificate "SHA256SUMS-$V.pem" --signature "SHA256SUMS-$V.sig" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$SIGNER" \
+            "SHA256SUMS-$V"
+          for p in darwin_arm64 darwin_amd64 linux_arm64 linux_amd64; do
+            t="camy_${V}_${p}.tar.gz"
+            get "$t"
+            get "$t.sbom.cdx.json" || echo "::warning::no SBOM published for $t"
+            want=$(awk -v f="$t" '($2 == f || $2 == "*" f) { print $1; exit }' "SHA256SUMS-$V")
+            got=$(sha256sum "$t" | cut -d' ' -f1)
+            if [ -z "$want" ] || [ "$want" != "$got" ]; then echo "::error::$t does not match SHA256SUMS-$V"; exit 1; fi
+          done
+          ls -la
+
+      - name: Release notes from CHANGELOG.md
+        if: steps.v.outputs.skip == 'false'
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          awk -v v="$V" '/^## / { if (on) exit; on = ($2 == v); next } on { print }' CHANGELOG.md \
+            | sed -e '1{/^$/d;}' > notes.md
+          [ -s notes.md ] || { echo "::error::empty CHANGELOG.md section for $V"; exit 1; }
+          printf '\n---\n\nEvery asset was downloaded from the release channel and verified before upload: checksums against `SHA256SUMS-%s`, and that manifest against its cosign signature. See docs/verifying-releases.md.\n' "$V" >> notes.md
+          cat notes.md
+
+      - name: Create the GitHub Release
+        if: steps.v.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "v$V" --target "$GITHUB_SHA" --title "camy $V" --notes-file notes.md --latest assets/*
+          echo "::notice::released v$V with $(ls assets | wc -l) assets"

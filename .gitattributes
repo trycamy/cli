@@ -1,0 +1,13 @@
+# Normalize to LF in the repository; check out LF everywhere.
+* text=auto eol=lf
+
+# The command reference is generated from the binary and must never be
+# hand-edited. Collapse it in diffs and exclude it from code search.
+docs/reference/**/*.md linguist-generated=true
+
+# The installer is byte-compared against the copy served from the release
+# channel. CRLF here would break that comparison.
+scripts/install.sh eol=lf
+scripts/install_test.sh eol=lf
+
+docs/assets/*.png binary

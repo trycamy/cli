@@ -1,0 +1,86 @@
+name: Bug report
+description: camy did something wrong, or nothing at all
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Two things first: `camy doctor` and `camy version --json` never print secrets, but chat replies and inbox rows can contain private data, so redact those before pasting. If the problem is with the Camy service rather than the CLI (an account, billing, something on camy.ai), [camy.ai/support](https://camy.ai/support) is the right place.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Paste the output of `camy version --json`.
+      placeholder: '{"version":"1.0.0","commit":"abc1234","os":"darwin","arch":"arm64"}'
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Linux on WSL2
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How camy was installed
+      options:
+        - The one-line installer (curl | sh)
+        - Homebrew
+        - A tarball, by hand
+        - camy update, from an earlier version
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal
+      description: The terminal program and, if relevant, tmux or a multiplexer.
+      placeholder: iTerm2 3.5 · kitty · GNOME Terminal · Windows Terminal (WSL2)
+  - type: textarea
+    id: command
+    attributes:
+      label: What you ran, and what happened
+      description: The exact command line and the output you saw. Add `--verbose` if you can; it prints request ids and timings and no secrets.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: input
+    id: exit
+    attributes:
+      label: Exit code
+      description: Run `echo $?` right after the command. The codes are documented in docs/exit-codes.md.
+      placeholder: "1"
+  - type: textarea
+    id: json
+    attributes:
+      label: The --json error, if you have one
+      description: Re-run with `--json` and paste the single-line object from stderr. It carries the error code, the exit, a hint, and a request id.
+      render: json
+  - type: textarea
+    id: doctor
+    attributes:
+      label: camy doctor
+      description: Paste the full output; it names the binary, the keychain state, and what your terminal supports.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I ran `camy update` (or reinstalled) and the problem is still there
+        - label: I searched the open issues
+        - label: I removed private data from everything pasted above
+          required: true

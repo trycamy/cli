@@ -1,0 +1,22 @@
+name: Feature request
+description: A command, flag, or behavior you wish camy had
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The workflow or script, in your own words. What do you run today, and where does it fall short?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would it look like?
+      description: Sketch the command line. If it emits data, sketch the `--json` shape too; exit codes and JSON shapes are a public contract, so the shape matters as much as the flag.
+      render: shell
+  - type: textarea
+    id: workarounds
+    attributes:
+      label: What you have tried
+      description: For example `camy api` against a raw endpoint, a shell pipeline, or a schedule.

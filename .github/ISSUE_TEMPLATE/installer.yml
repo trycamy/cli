@@ -1,0 +1,44 @@
+name: Install or update problem
+description: The one-line installer, Homebrew, or camy update did not do what it should
+labels: [installer]
+body:
+  - type: dropdown
+    id: method
+    attributes:
+      label: What you ran
+      options:
+        - curl -fsSL https://camy.ai/cli/install.sh | sh
+        - brew install camy
+        - camy update
+        - A tarball, by hand
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Linux on WSL2
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: shell
+    attributes:
+      label: Shell
+      placeholder: zsh 5.9 · bash 5.2 · fish 4.0
+  - type: textarea
+    id: output
+    attributes:
+      label: Full output
+      description: Everything the command printed. The installer prints no secrets.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: after
+    attributes:
+      label: What `camy version` and `which -a camy` print afterwards
+      render: shell

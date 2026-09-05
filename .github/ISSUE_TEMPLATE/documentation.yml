@@ -1,0 +1,24 @@
+name: Documentation
+description: Something in the docs is wrong, missing, or unclear
+labels: [documentation]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: The file under docs/, the README, or the `camy docs` topic.
+      placeholder: docs/scripting.md
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing
+      description: Quote the sentence if there is one. If the docs disagree with what the binary does, say which one you believe.
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: Suggested wording
+      description: Optional. Pages under docs/reference are generated from the binary; a fix there needs a change to the CLI's help text, which we make on the next release.
