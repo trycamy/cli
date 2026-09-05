@@ -60,7 +60,7 @@ cp "$ROOT/npm/camy/bin/camy.js" "$dir/bin/camy.js"; chmod 755 "$dir/bin/camy.js"
 cp "$ROOT/npm/camy/README.md" "$dir/README.md"; license "$dir/LICENSE.md"
 cat > "$dir/package.json" <<JSON
 {
-  "name": "camy",
+  "name": "@camy/cli",
   "version": "$V",
   "description": "Camy in your terminal: the same agent, memory, and cloud computer you use at camy.ai, as one binary you can pipe, script, and schedule.",
   "keywords": ["camy", "cli", "agent", "terminal"],

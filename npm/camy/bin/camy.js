@@ -22,7 +22,7 @@ let bin;
 try {
   bin = require.resolve(`${pkg}/bin/camy`);
 } catch {
-  process.stderr.write(`camy: the platform package ${pkg} is missing. Reinstall with optional dependencies enabled (npm install -g camy), or use the installer: ${installer}\n`);
+  process.stderr.write(`camy: the platform package ${pkg} is missing. Reinstall with optional dependencies enabled (npm install -g @camy/cli), or use the installer: ${installer}\n`);
   process.exit(1);
 }
 const result = spawnSync(bin, process.argv.slice(2), { stdio: "inherit" });

@@ -1,11 +1,11 @@
-# camy
+# @camy/cli
 
 Camy in your terminal. This package installs the `camy` command; the binary
 for your platform arrives as an optional dependency, and nothing is fetched
 at install time.
 
 ```bash
-npm install -g camy
+npm install -g @camy/cli
 camy auth login
 ```
 

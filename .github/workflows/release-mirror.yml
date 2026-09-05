@@ -115,7 +115,7 @@ jobs:
           gh release create "v$V" --target "$GITHUB_SHA" --title "v$V" --notes-file notes.md --latest assets/*
           echo "::notice::released v$V with $(ls assets | wc -l) assets"
 
-  # The npm packages: a `camy` launcher plus one platform package per os/arch
+  # The npm packages: an @camy/cli launcher plus one platform package per os/arch
   # carrying the binary, assembled from the channel's verified tarballs
   # (scripts/build-npm.sh) and published with npm trusted publishing, so the
   # credential is this workflow's identity and every publish carries
