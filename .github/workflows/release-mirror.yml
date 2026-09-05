@@ -109,5 +109,5 @@ jobs:
           V: ${{ steps.v.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "v$V" --target "$GITHUB_SHA" --title "camy $V" --notes-file notes.md --latest assets/*
+          gh release create "v$V" --target "$GITHUB_SHA" --title "v$V" --notes-file notes.md --latest assets/*
           echo "::notice::released v$V with $(ls assets | wc -l) assets"
