@@ -36,6 +36,9 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      released: ${{ steps.v.outputs.skip == 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,3 +114,39 @@ jobs:
           set -euo pipefail
           gh release create "v$V" --target "$GITHUB_SHA" --title "v$V" --notes-file notes.md --latest assets/*
           echo "::notice::released v$V with $(ls assets | wc -l) assets"
+
+  # The npm packages: a `camy` launcher plus one platform package per os/arch
+  # carrying the binary, assembled from the channel's verified tarballs
+  # (scripts/build-npm.sh) and published with npm trusted publishing, so the
+  # credential is this workflow's identity and every publish carries
+  # provenance. Enabled by the repository variable NPM_PUBLISH=true once the
+  # packages exist on npmjs.com with this workflow as their trusted publisher.
+  npm:
+    needs: mirror
+    if: needs.mirror.outputs.released == 'true' && vars.NPM_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5 or later.
+      - name: Update npm
+        run: npm install -g npm@^11.5
+
+      - name: Build the packages from the channel
+        env:
+          V: ${{ needs.mirror.outputs.version }}
+        run: sh scripts/build-npm.sh "$V"
+
+      - name: Publish
+        run: sh scripts/publish-npm.sh --provenance
