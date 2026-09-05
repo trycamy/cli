@@ -23,6 +23,9 @@ if [ -z "$ASSETS" ]; then
   done
 fi
 sum() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+# LICENSE.md links to sibling files by relative path; inside a package they
+# do not exist, so point them at the repository.
+license() { sed -e 's#](CONTRIBUTING.md)#](https://github.com/trycamy/cli/blob/main/CONTRIBUTING.md)#' -e 's#](THIRD-PARTY-NOTICES.md)#](https://github.com/trycamy/cli/blob/main/THIRD-PARTY-NOTICES.md)#' "$ROOT/LICENSE.md" > "$1"; }
 
 rm -rf "$OUT"; mkdir -p "$OUT"
 for p in darwin-arm64:darwin_arm64:darwin:arm64:"macOS arm64" darwin-x64:darwin_amd64:darwin:x64:"macOS x64" linux-arm64:linux_arm64:linux:arm64:"Linux arm64" linux-x64:linux_amd64:linux:x64:"Linux x64"; do
@@ -34,7 +37,7 @@ for p in darwin-arm64:darwin_arm64:darwin:arm64:"macOS arm64" darwin-x64:darwin_
   dir="$OUT/cli-$name"; mkdir -p "$dir/bin"
   tar -xzf "$ASSETS/$tarball" -C "$WORK" camy THIRD-PARTY-NOTICES.md
   mv "$WORK/camy" "$dir/bin/camy"; chmod 755 "$dir/bin/camy"; mv "$WORK/THIRD-PARTY-NOTICES.md" "$dir/THIRD-PARTY-NOTICES.md"
-  cp "$ROOT/LICENSE.md" "$dir/LICENSE.md"
+  license "$dir/LICENSE.md"
   sed -e "s/PLATFORM_HUMAN/$human/" -e "s/PLATFORM/$name/" "$ROOT/npm/platform-README.md" > "$dir/README.md"
   cat > "$dir/package.json" <<JSON
 {
@@ -54,7 +57,7 @@ done
 
 dir="$OUT/camy"; mkdir -p "$dir/bin"
 cp "$ROOT/npm/camy/bin/camy.js" "$dir/bin/camy.js"; chmod 755 "$dir/bin/camy.js"
-cp "$ROOT/npm/camy/README.md" "$dir/README.md"; cp "$ROOT/LICENSE.md" "$dir/LICENSE.md"
+cp "$ROOT/npm/camy/README.md" "$dir/README.md"; license "$dir/LICENSE.md"
 cat > "$dir/package.json" <<JSON
 {
   "name": "camy",

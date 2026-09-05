@@ -11,7 +11,7 @@ SKIP = ("http://", "https://", "mailto:", "#")
 
 bad = []
 for dirpath, dirnames, filenames in os.walk(ROOT):
-    dirnames[:] = [d for d in dirnames if d != ".git"]
+    dirnames[:] = [d for d in dirnames if d != ".git" and not (dirpath == ROOT + "/npm" and d == "out")]
     for name in filenames:
         if not name.endswith(".md"):
             continue
