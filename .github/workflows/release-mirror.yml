@@ -31,6 +31,8 @@ env:
   CHANNEL: https://dl.camy.sh/stable
   # The workflow that signs releases lives in the private source repository.
   SIGNER: '^https://github\.com/CamyAI/camy-cli/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'
+  # The source repository the SLSA provenance must name, for slsa-verifier.
+  SOURCE: github.com/CamyAI/camy-cli
 
 jobs:
   mirror:
@@ -68,6 +70,10 @@ jobs:
         if: steps.v.outputs.skip == 'false'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
+      - name: Install slsa-verifier
+        if: steps.v.outputs.skip == 'false'
+        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6 # v2.7.1
+
       - name: Download and verify
         if: steps.v.outputs.skip == 'false'
         env:
@@ -91,6 +97,18 @@ jobs:
             got=$(sha256sum "$t" | cut -d' ' -f1)
             if [ -z "$want" ] || [ "$want" != "$got" ]; then echo "::error::$t does not match SHA256SUMS-$V"; exit 1; fi
           done
+          # SLSA build provenance, published from 1.0.1 on. When it is there it
+          # must verify for every tarball: the provenance names the source
+          # repository, the tag, and the builder that produced these bytes.
+          if get "camy_$V.intoto.jsonl"; then
+            for p in darwin_arm64 darwin_amd64 linux_arm64 linux_amd64; do
+              slsa-verifier verify-artifact "camy_${V}_${p}.tar.gz" \
+                --provenance-path "camy_$V.intoto.jsonl" \
+                --source-uri "$SOURCE" --source-tag "v$V"
+            done
+          else
+            echo "::warning::no SLSA provenance published for $V"
+          fi
           ls -la
 
       - name: Release notes from CHANGELOG.md
@@ -102,7 +120,7 @@ jobs:
           awk -v v="$V" '/^## / { if (on) exit; on = ($2 == v); next } on { print }' CHANGELOG.md \
             | sed -e '1{/^$/d;}' > notes.md
           [ -s notes.md ] || { echo "::error::empty CHANGELOG.md section for $V"; exit 1; }
-          printf '\n---\n\nEvery asset was downloaded from the release channel and verified before upload: checksums against `SHA256SUMS-%s`, and that manifest against its cosign signature. See docs/verifying-releases.md.\n' "$V" >> notes.md
+          printf '\n---\n\nEvery asset was downloaded from the release channel and verified before upload: checksums against `SHA256SUMS-%s`, that manifest against its cosign signature, and, where published, each tarball against the SLSA provenance `camy_%s.intoto.jsonl`. See docs/verifying-releases.md.\n' "$V" "$V" >> notes.md
           cat notes.md
 
       - name: Create the GitHub Release

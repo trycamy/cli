@@ -237,8 +237,8 @@ runs exactly as the card showed it. They are inspected in two narrower
 places:
 
 - The destructive guard refuses a command that pairs a read verb (`cat`,
-  `head`, `grep`, `cp`, `rsync`, and similar, anywhere in the argv) with a
-  secret-shaped path. See
+  `head`, `grep`, `cp`, `rsync`, `curl`, `wget`, `openssl`, `jq`, `tar`, and
+  similar, anywhere in the argv) with a secret-shaped path. See
   [The destructive-command guard](#the-destructive-command-guard).
 - The read-only auto-run check resolves every path-shaped argument against
   the project root and this denylist, demoting anything that escapes to an
@@ -262,10 +262,14 @@ refuses:
 - `chmod -R 777` against a root-ish target
 - macOS Keychain, Gatekeeper, and SIP tools (`security`, `spctl`, `csrutil`)
 - an interpreter running inline code rather than a file — `python -c`,
-  `node -e`, `ruby -e`, `osascript -e`, and similar — refused because this
-  floor cannot vet arbitrary program text the way it can inspect an argv
-- a shell `-c` script containing a fork bomb, a `curl | sh` pipe, or an `rm`
-  with both a recursive-force flag and a root-ish or missing target
+  `node -e`, `ruby -e`, `osascript -e`, `pwsh -Command` or
+  `-EncodedCommand` (including abbreviations such as `-enc`), and similar —
+  refused because this floor cannot vet arbitrary program text the way it
+  can inspect an argv
+- a shell `-c` script containing a fork bomb, a pipe into a shell
+  interpreter — `| sh`, `| bash`, `| /bin/bash`, and the same shapes written
+  with `|&`, whatever command produces the piped bytes — or an `rm` with
+  both a recursive-force flag and a root-ish or missing target
 - a direct read of a secret-shaped path via a plain read command (`cat
   ~/.ssh/id_rsa` and similar), even without going through `read_file`
 - a wrapper — `env`, `nice`, `timeout`, `xargs`, and similar — around any of

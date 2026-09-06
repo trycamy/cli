@@ -158,6 +158,13 @@ A signal sent to the camy process from outside (SIGINT, SIGTERM) or a terminal
 hangup unwinds the session cleanly, restoring your local terminal to normal
 (non-raw) mode.
 
+A dropped network connection does not end `camy vm shell`: it redials in
+place instead of exiting. A reconnect opens a new shell and says so —
+nothing from the old session carries over, including anything you typed as
+it dropped, so retype it once you're back. After three reconnects within a
+minute, a fourth drop is not retried: the command stops with a
+`connection lost — could not reconnect` error.
+
 `camy vm shell` is the one place where human-facing output is not sanitized:
 the PTY stream carries real terminal-control sequences that programs inside
 the shell (an editor, a pager, anything using ncurses) legitimately need, so

@@ -270,6 +270,7 @@ markdown source.
 | `/approvals` | Opens a picker over pending checkpoints — the leash, inline. |
 | `/inbox` | Shows the inbox list, read-only, inline. |
 | `/status` | The right-now status pane. |
+| `/compact` | Summarizes older context on demand, and says so when there's nothing to compact. |
 | `/mode [agent\|quick]` | Shows or sets how deep the agent thinks — see [below](#mode-agent-or-quick). |
 | `/jobs` | What's scheduled and when it next fires. |
 | `/vm` | Your cloud workspace. |
@@ -292,11 +293,11 @@ Two flags change how the app draws without changing what it can do:
   the full-screen app entirely and drops you into a plain line-by-line
   REPL instead: no redraws, no spinners, no boxes.
 
-The REPL's slash set is the same one, minus the app's `/chats show ID` form
-and plus `/last`, which prints the current chat id: `/new`, `/chat ID`,
-`/mode`, `/approvals`, `/inbox`, `/status`, `/jobs`, `/vm`, `/chats`,
-`/last`, `/help`, and `/quit` (also `/exit` and `/q`, which work in the
-full-screen app too).
+The REPL's slash set is the same one, minus `/compact` and the app's
+`/chats show ID` form, and plus `/last`, which prints the current chat id:
+`/new`, `/chat ID`, `/mode`, `/approvals`, `/inbox`, `/status`, `/jobs`,
+`/vm`, `/chats`, `/last`, `/help`, and `/quit` (also `/exit` and `/q`, which
+work in the full-screen app too).
 
 Each of those delegates to the same one-shot logic
 [`camy approvals`](reference/camy_approvals.md),

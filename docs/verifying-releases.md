@@ -16,6 +16,7 @@ release tarball.
 | `SHA256SUMS-<version>.sig` | Detached cosign signature for that manifest. | Both |
 | `SHA256SUMS-<version>.pem` | The certificate that signature was made with. | Both |
 | `SHA256SUMS-<version>.minisig` | minisign signature for that manifest. | Both |
+| `camy_<version>.intoto.jsonl` | SLSA build provenance covering the four tarballs, from 1.0.1 on. | Both |
 | `SHA256SUMS` | A merged, cumulative checksum index spanning every published version. This is what the installer and `camy update` check downloads against. | Channel only |
 | `VERSION` | The current version as a plain-text string — what the installer and `camy update` read to find the latest release. | Channel only |
 
@@ -145,15 +146,58 @@ The signature covers the manifest for a single release, published as
 release. Cryptographic assurance, rather than TLS and a checksum, needs the
 version-scoped file.
 
+## Verifying build provenance
+
+From 1.0.1 on, every release also publishes `camy_<version>.intoto.jsonl`,
+a [SLSA](https://slsa.dev/) provenance statement over the four
+tarballs. Where the cosign signature proves who signed the checksum
+manifest, the provenance proves how the tarballs came to exist: which
+source repository and tag they were built from, and by which builder. It is
+generated and signed not by the CLI's own release workflow but by the SLSA
+project's [generator](https://github.com/slsa-framework/slsa-github-generator),
+running as a separate, isolated job, so the workflow that built the binaries
+could not have forged it.
+
+Check a tarball with [slsa-verifier](https://github.com/slsa-framework/slsa-verifier)
+(the `slsa-verifier` package on Homebrew):
+
+```bash
+slsa-verifier verify-artifact camy_1.0.1_darwin_arm64.tar.gz \
+  --provenance-path camy_1.0.1.intoto.jsonl \
+  --source-uri github.com/CamyAI/camy-cli \
+  --source-tag v1.0.1
+```
+
+A good result ends with `PASSED: SLSA verification passed`. It confirms that
+the tarball's hash is a subject of the provenance, that the provenance was
+signed through GitHub Actions' OIDC issuer by a tagged release of the SLSA
+generator, and that the release workflow that produced these digests ran
+from the `v1.0.1` tag of the CLI's source repository. The tarballs are built
+on the project's own runners, which the provenance does not describe; what
+it pins is the set of digests, the repository, the tag, and the workflow. Pin the source URI and tag yourself, as with the cosign identity
+above; the values in the provenance are what is being checked, not what to
+trust.
+
+The source repository is private, so the provenance names a repository you
+cannot browse. What it still gives you is a binding, made by a builder the
+CLI's maintainers do not control, between these exact bytes and one tagged
+commit of that repository; the same binding every later release carries.
+
 ## What the installer and `camy update` check
 
-Both fetch over TLS and check the downloaded tarball's SHA-256 against the
-merged `SHA256SUMS` before installing or swapping anything into place.
-Neither runs the cosign or minisign verification above.
+The installer fetches over TLS and checks the downloaded tarball's SHA-256
+against the merged `SHA256SUMS` before installing. That trust model is TLS
+plus a checksum, the same level of assurance package managers typically
+provide. For the signature-based guarantee on a first install, run the
+`cosign verify-blob` or `minisign` steps yourself before installing.
 
-That trust model is TLS plus a checksum, the same level of assurance package
-managers typically provide. For the signature-based guarantee, run the
-`cosign verify-blob` steps yourself before installing.
+`camy update`, from 1.0.1, goes further. Before it downloads anything it
+fetches the release's `SHA256SUMS-<version>` and its `.minisig`, verifies
+that signature with the minisign public key above, which is built into the
+binary, and only then downloads the tarball and checks its hash against the
+signed manifest. A manifest that is missing, unsigned, or signed by any
+other key stops the update, so control of the download host alone cannot
+push a binary to an updater. It does not run `cosign` or `slsa-verifier`.
 
 `camy update` also refuses to honor `CAMY_DL_BASE`, an override for which
 host it downloads from, on any released binary. Only an unstamped development

@@ -124,11 +124,16 @@ worst case before `--wait` either finishes or gives up.
 
 If the checkpoint's own outcome reaches a terminal state — completed,
 failed, rejected, expired, cancelled — `--wait` reports it and exits
-accordingly: 0 for completed, 1 otherwise.
+accordingly: 0 for completed, 1 otherwise. It only ever reports an outcome
+it can tie back to the approval it's actually waiting on — a different
+step's result landing on the same chat around the same time is never read
+as this one finishing.
 
-If the turn never resumes within that window, `--wait` exits 1 with a
-message that says so explicitly. The approval was not undone; only this CLI
-process gave up watching. Use
+If the turn never resumes within that window, `--wait` exits 1. When it
+never found any result it could tie to this approval, it says the turn did
+not resume; when it saw one but couldn't tell whether it belonged to this
+approval or some other step, it says that instead of guessing. Either way
+the approval was not undone; only this CLI process gave up watching. Use
 [`camy chats show ID`](reference/camy_chats_show.md) to see what actually
 happened.
 
@@ -142,8 +147,15 @@ name appended when there is one.
 
 The body shows the summary, capped at a few lines, with a
 "… +N more — o opens the full card" marker when it runs long. For a local
-command or file write it shows the verbatim command or path instead,
-wrapped but never truncated, so nothing risky can hide past a cutoff.
+command it shows the verbatim command instead, wrapped but never
+truncated, so nothing risky can hide past a cutoff. A local file write
+shows the verbatim path the same way, then what the write would actually
+change: when the file already exists, a diff against the copy on disk,
+capped with an "o opens the full card" note if it runs long, or a line
+saying the file already has these contents, or why no diff could be read.
+When the file is new there's nothing to diff against, so the card shows its
+line count and size instead. Whenever no diff is shown — a new file, or a
+diff that couldn't be read — a preview of the proposed content follows.
 
 What answers it depends on the kind:
 
@@ -173,6 +185,23 @@ no-op:
   approves this one run without granting anything.
 - On a card that isn't a local `run_command` at all, it falls through to the
   same web-link-and-reprompt as `o`.
+
+### The build-grant offer
+
+Some cards carry an extra block: an offer for a standing build grant, a
+single acceptance that would cover every further action in a class of
+tools for the rest of the build, with no card for any of them. When a card
+carries one, it lists exactly what's on offer:
+
+- which actions the grant would cover, named tool by tool
+- which read-only checks never need approval either way, grant or no grant
+- that anything else — publishing, deploying, deleting a file, paying —
+  still gets its own card regardless
+
+Answering from the CLI never grants the standing authorization: `y` here
+approves only the one action in front of you. The standing grant is offered
+only on Camy's own approval card, in Camy's app or at camy.ai, not on any
+card camy draws in your terminal.
 
 ## Headless behavior
 
@@ -306,7 +335,9 @@ Any other terminal outcome prints this instead:
 ```
 
 `code` is `checkpoint_` followed by the outcome: `failed`, `rejected`,
-`expired`, or `cancelled`.
+`expired`, or `cancelled`. `checkpoint_uncorrelated` is a fifth code in the
+same object shape, but it isn't an outcome — it means `--wait` gave up
+without ever being able to tell which result, if any, was this approval's.
 
 ## See also
 

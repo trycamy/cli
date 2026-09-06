@@ -9,6 +9,44 @@ change to either that is not backward compatible bumps the major version.
 Each GitHub Release on this repository carries the same notes as its section
 below, plus the signed checksums for that version.
 
+## 1.0.1 — unreleased
+
+This update adds a credit balance and a live run gauge to `camy status`,
+brings camy to npm, and includes stability, security, and supply-chain
+improvements.
+
+**New**
+
+- Adds your credit balance and a live gauge of context and credits to
+  `camy status`, and `credits` and `run_meter` to `camy status --json`.
+- Adds `/compact` to the full-screen app to summarize older context on
+  demand.
+- Adds a diff against the file on disk to approval cards for local file
+  writes.
+- Adds npm as an install method: `npm install -g @camy/cli`, or
+  `npx @camy/cli` with no global install. See
+  [Installation](docs/installation.md#npm).
+
+**Improvements**
+
+- `camy vm shell` now reconnects in place when its connection drops,
+  opening a fresh shell and saying so.
+- `camy update`, `camy uninstall`, and `camy doctor` now recognize an
+  npm-managed install.
+- Improves the durability of camy's own files: an interrupted write can no
+  longer leave one truncated.
+
+**Security**
+
+- `camy update` now verifies each release's minisign signature with a key
+  built into the binary before it downloads anything.
+- Every release now ships SLSA provenance, verifiable with `slsa-verifier`.
+- Hardens the local bridge's safety checks and `camy approvals --wait`.
+  Updating is recommended.
+
+For release verification, see
+[Verifying releases](docs/verifying-releases.md).
+
 ## 1.0.0 — 2026-09-04
 
 The first public release. [The documentation](docs/README.md) covers the full

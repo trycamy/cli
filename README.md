@@ -52,6 +52,9 @@ curl -fsSL https://camy.ai/cli/install.sh | sh
 
 # or, with Homebrew
 brew tap trycamy/tap && brew install camy
+
+# or, with npm
+npm install -g @camy/cli
 ```
 
 Nothing unpacks until its checksum matches. [Installation](docs/installation.md)

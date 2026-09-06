@@ -61,13 +61,20 @@ every approval fail closed, because machine output must never emit a prompt.
 
 Where a command wraps a server response, the JSON is the server's own shape
 passed through unchanged. [`camy status --json`](reference/camy_status.md)
-gives you `approvals`, `inbox_counts`, `jobs` and `workspace`; what is inside
-each of them is defined by the API, not by the CLI. Treat the keys camy
-itself documents as stable, and treat a pass-through row as something that
-can gain fields.
+gives you `approvals`, `inbox_counts`, `jobs`, `workspace`, `credits` and
+`run_meter`; what is inside them is defined by the API, not by the CLI, with
+`credits` the one exception below. `run_meter` holds context and credit usage
+for a turn in progress, and is `null` unless a turn is currently live on your
+last chat on this profile. Treat the keys camy itself documents as stable,
+and treat a pass-through row as something that can gain fields.
 
-Two shapes are worth knowing because they are camy's own, not the server's:
+Three shapes are worth knowing because they are camy's own, not the server's:
 
+- `credits` in [`camy status --json`](reference/camy_status.md) is a
+  deliberately narrowed object, not the balance endpoint's whole body:
+  `plan`, `monthly_remaining`, `daily_remaining`, `daily_max`,
+  `daily_reset_at`, `purchased` and `welcome_grant`. It is `null` when the
+  balance can't be read; the rest of the object is still emitted.
 - [`camy doctor --json`](reference/camy_doctor.md) is an array of checks,
   each `{"name", "ok", "info"}` plus `"warn"` and `"fix"` when they apply.
   The exit code is driven only by `ok: false`; a row with `warn: true` never

@@ -108,6 +108,21 @@ A Homebrew-managed `camy` isn't updated or removed by `camy update` or
 `camy uninstall` — both detect a Homebrew install and point you at
 `brew upgrade camy` or `brew uninstall camy` instead.
 
+## npm
+
+```bash
+npm install -g @camy/cli
+```
+
+`@camy/cli` is a small launcher; the binary for your platform arrives
+as an optional dependency (`@camy/cli-darwin-arm64` and its siblings), so
+nothing is downloaded when the package installs. `npx @camy/cli` works without a
+global install. Update with `npm update -g @camy/cli` and remove with
+`npm uninstall -g @camy/cli`; `camy update` and `camy uninstall` detect an npm
+install and point you at those. Packages are published by this repository's
+own [release workflow](../.github/workflows/release-mirror.yml) from the
+channel's verified tarballs, with npm provenance.
+
 ## Manual download
 
 Download a release tarball directly from `https://dl.camy.sh/stable/`.

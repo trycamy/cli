@@ -33,13 +33,14 @@ your terminal can draw hyperlinks and inline images, so its note isn't a
 command to run.
 
 [`camy doctor`](reference/camy_doctor.md) runs up to seven checks, in this
-order. `path` appears only when the binary's directory isn't on `$PATH`,
-and `api` only when a key is stored:
+order. `path` appears only when the binary's directory isn't on `$PATH` —
+or, for an npm install, when no `camy` on `$PATH` leads back to it — and
+`api` only when a key is stored:
 
 | Check | What it verifies | Can fail the command? |
 | --- | --- | --- |
 | `binary` | The path of the running executable. | No — always ok |
-| `path` | Whether that binary's directory is on `$PATH`. Only shown when it isn't. | No — warning only |
+| `path` | Whether the binary's directory is on `$PATH` — or, for an npm install, whether some `camy` on `$PATH` leads back to it. Only shown when it isn't. | No — warning only |
 | `version` | The installed version and platform. | No — always ok |
 | `keychain` | A round-trip write/delete against your OS keychain. | No — warning only |
 | `auth` | Whether a key is stored, and whether the server still accepts it. | **Yes** |
@@ -298,8 +299,10 @@ then asks you to make sure `~/.local/bin` really comes before the blocked
 directory.
 
 A Homebrew-managed `camy` is refused before any of this: `camy update`
-detects it and points you at `brew upgrade camy` instead. See
-[Updating](installation.md#updating).
+detects it and points you at `brew upgrade camy` instead. An npm-managed
+one is refused the same way, pointing at `npm update -g @camy/cli`;
+`camy uninstall` behaves the same for both. See
+[Updating](installation.md#updating) and [npm](installation.md#npm).
 
 ### Why `camy update` ignores `CAMY_DL_BASE`
 
@@ -330,6 +333,12 @@ The `path` check only looks at the binary that is running right now. If a
 different, older `camy` sits earlier on your `PATH` — a stale Homebrew
 install, for instance — it won't catch that on its own. Run `which -a camy`
 to see every `camy` your shell can find.
+
+An npm install (`npm install -g @camy/cli`) is judged differently. The
+binary lives inside `node_modules`, and what sits on your `PATH` is the
+launcher npm links to it, so the `path` row stays quiet as long as some
+`camy` on your `PATH` leads back to that install, and names npm's global bin
+directory as the fix only when none does. See [npm](installation.md#npm).
 
 ## Wrong or missing color
 

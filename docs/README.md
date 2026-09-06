@@ -33,4 +33,4 @@ Every guide is here, in reading order.
 
 - [Terminal output and accessibility](terminal.md) — color, `NO_COLOR`, `--accessible`, paging, links, inline images
 - [Troubleshooting](troubleshooting.md) — [`camy doctor`](reference/camy_doctor.md), common errors, update problems
-- [Verifying releases](verifying-releases.md) — checksums, signatures, SBOMs, the release channel layout
+- [Verifying releases](verifying-releases.md) — checksums, signatures, SLSA provenance, SBOMs, the release channel layout
