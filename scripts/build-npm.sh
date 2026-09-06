@@ -43,7 +43,7 @@ for p in darwin-arm64:darwin_arm64:darwin:arm64:"macOS arm64" darwin-x64:darwin_
 {
   "name": "@camy/cli-$name",
   "version": "$V",
-  "description": "The camy binary for $human. Install the camy package instead.",
+  "description": "The camy binary for $human. Install @camy/cli instead; this package is a platform dependency of it.",
   "repository": { "type": "git", "url": "git+https://github.com/trycamy/cli.git" },
   "homepage": "https://camy.ai",
   "license": "SEE LICENSE IN LICENSE.md",

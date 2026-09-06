@@ -62,8 +62,31 @@ jobs:
             https://dl.camy.sh/install -o "$RUNNER_TEMP/live-install.sh"
           diff -u "$RUNNER_TEMP/live-install.sh" scripts/install.sh
 
-  docs:
-    name: Docs links
+  # The merged index the installer once trusted is unsigned; the per-version
+  # manifests are signed. Nothing else compares them, so this read-only job
+  # does, on every push and weekly: every line of the merged index must
+  # match the signed manifest of its version, and every version on the
+  # channel must have one. A mismatch means the channel changed outside a
+  # release.
+  index:
+    name: Channel index matches the signed manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compare stable/SHA256SUMS with every SHA256SUMS-<version>
+        run: |
+          set -euo pipefail
+          C=https://dl.camy.sh/stable
+          get() { curl -fsSL --retry 3 --retry-delay 2 --proto '=https' --tlsv1.2 "$@"; }
+          get "$C/SHA256SUMS" | grep -v '^#' > index
+          bad=0
+          for v in $(awk '{print $2}' index | sed -nE 's/^camy_([0-9][^_]*)_.*/\1/p' | sort -uV); do
+            if ! get "$C/SHA256SUMS-$v" -o "manifest-$v"; then echo "::error::no signed manifest for $v on the channel"; bad=1; continue; fi
+            grep "_${v}_" index | sort -k2 > "index-$v"
+            grep -v '^#' "manifest-$v" | sort -k2 > "signed-$v"
+            if ! diff -u "signed-$v" "index-$v"; then echo "::error::the merged index disagrees with SHA256SUMS-$v"; bad=1; fi
+          done
+          [ "$bad" = 0 ] && echo "index matches every signed manifest"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -229,9 +229,12 @@ release channel, then a SHA-256 of the tarball compared against the line in
 checksum installs nothing; the installer additionally refuses a `SHA256SUMS`
 that carries two disagreeing lines for the same file.
 
-The installer trusts TLS plus the checksums. From 1.0.1, `camy update`
-also verifies the release's minisign signature with a public key built into
-the binary, and refuses to install anything the release key did not sign.
+The installer fetches the release's signed manifest and, where `minisign`
+is installed, verifies its signature with the public key built into the
+script before trusting a checksum; without minisign it says so and installs
+on TLS plus checksum. From 1.0.1, `camy update` verifies the same signature
+with a key built into the binary, and refuses to install anything the
+release key did not sign.
 [Verifying releases](docs/verifying-releases.md) has the `cosign verify-blob`
 and `slsa-verifier` recipes, the channel layout, and how to read the SBOM. The minisign public key is published in
 [Verifying releases](docs/verifying-releases.md), beside the cosign recipe.

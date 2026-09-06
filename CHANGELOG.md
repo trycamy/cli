@@ -39,7 +39,9 @@ improvements.
 **Security**
 
 - `camy update` now verifies each release's minisign signature with a key
-  built into the binary before it downloads anything.
+  built into the binary before it downloads anything. The installer does the
+  same where `minisign` is installed, and always reads the release's signed
+  manifest rather than the shared index.
 - Every release now ships SLSA provenance, verifiable with `slsa-verifier`.
 - Hardens the local bridge's safety checks and `camy approvals --wait`.
   Updating is recommended.

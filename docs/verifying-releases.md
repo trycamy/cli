@@ -92,8 +92,11 @@ this one, so the identity to pin is that workflow's path; the regexp above
 matches it for any release tag. To see the identity a certificate actually
 carries:
 
+cosign writes the certificate base64-wrapped, so decode it before reading
+it:
+
 ```bash
-openssl x509 -in SHA256SUMS-1.0.0.pem -noout -text | grep -A1 'Subject Alternative Name'
+base64 -d < SHA256SUMS-1.0.0.pem | openssl x509 -noout -text | grep -A1 'Subject Alternative Name'
 ```
 
 A successful verification confirms that `SHA256SUMS-1.0.0` was signed by a
@@ -185,11 +188,14 @@ commit of that repository; the same binding every later release carries.
 
 ## What the installer and `camy update` check
 
-The installer fetches over TLS and checks the downloaded tarball's SHA-256
-against the merged `SHA256SUMS` before installing. That trust model is TLS
-plus a checksum, the same level of assurance package managers typically
-provide. For the signature-based guarantee on a first install, run the
-`cosign verify-blob` or `minisign` steps yourself before installing.
+The installer fetches the release's own `SHA256SUMS-<version>` over TLS.
+If `minisign` is installed, it verifies that manifest's signature with the
+public key above before trusting it, and the summary line says
+"signature and checksum verified"; set `CAMY_REQUIRE_SIGNATURE=1` to refuse
+an install where that check cannot run. Without minisign the install rests
+on TLS plus the checksum, the same assurance package managers typically
+provide, and the summary says so. The installer also refuses a channel that
+names a release older than the one it shipped with.
 
 `camy update`, from 1.0.1, goes further. Before it downloads anything it
 fetches the release's `SHA256SUMS-<version>` and its `.minisig`, verifies
