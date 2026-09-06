@@ -39,6 +39,24 @@ OS="$raw_os"
 VER="9.9.9"
 TARBALL="camy_${VER}_${OS}_${ARCH}.tar.gz"
 
+# With minisign installed (CI installs it), every fixture manifest is signed
+# with a throwaway key and the installer under test is a copy carrying that
+# key, so the signature path runs in every row; rows 16-18 cover its
+# failures. Without minisign the rows run checksum-only and 16-18 are skipped.
+SIGN=""
+if command -v minisign >/dev/null 2>&1; then
+  minisign -G -W -f -p "$WORK/test.pub" -s "$WORK/test.sec" >/dev/null 2>&1
+  minisign -G -W -f -p "$WORK/other.pub" -s "$WORK/other.sec" >/dev/null 2>&1
+  TESTKEY=$(sed -n '2p' "$WORK/test.pub")
+  sed "s|^MINISIGN_PUB=.*|MINISIGN_PUB=\"$TESTKEY\"|" "$INSTALLER" > "$WORK/install-signed.sh"
+  INSTALLER="$WORK/install-signed.sh"
+  SIGN=1
+fi
+sign_manifest() {
+  [ -n "$SIGN" ] || return 0
+  minisign -S -s "$WORK/test.sec" -m "$1" -x "$1.minisig" >/dev/null 2>&1
+}
+
 payload="$WORK/payload"
 mkdir -p "$payload"
 printf '#!/bin/sh\necho fake-camy\n' > "$payload/camy"
@@ -48,36 +66,49 @@ mkdir -p "$CHAN/good"
 tar -C "$payload" -czf "$CHAN/good/$TARBALL" camy
 HASH=$(shasum -a 256 "$CHAN/good/$TARBALL" 2>/dev/null | awk '{print $1}')
 [ -n "$HASH" ] || HASH=$(sha256sum "$CHAN/good/$TARBALL" | awk '{print $1}')
-printf '%s  %s\n' "$HASH" "$TARBALL" > "$CHAN/good/SHA256SUMS"
+printf '%s  %s\n' "$HASH" "$TARBALL" > "$CHAN/good/SHA256SUMS-$VER"
+sign_manifest "$CHAN/good/SHA256SUMS-$VER"
 # sha256 of the empty string — a fixed, well-formed, guaranteed-WRONG digest
 WRONG=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 
 mkdir -p "$CHAN/r2" && cp "$CHAN/good/$TARBALL" "$CHAN/r2/"
-printf '%s0  %s\n' "$HASH" "$TARBALL" > "$CHAN/r2/SHA256SUMS"           # 65 hex chars
+printf '%s0  %s\n' "$HASH" "$TARBALL" > "$CHAN/r2/SHA256SUMS-$VER"           # 65 hex chars
+sign_manifest "$CHAN/r2/SHA256SUMS-$VER"
 
 mkdir -p "$CHAN/r3" && cp "$CHAN/good/$TARBALL" "$CHAN/r3/"
-printf '%s  %s\n' "$WRONG" "$TARBALL" > "$CHAN/r3/SHA256SUMS"           # well-formed, wrong
+printf '%s  %s\n' "$WRONG" "$TARBALL" > "$CHAN/r3/SHA256SUMS-$VER"           # well-formed, wrong
+sign_manifest "$CHAN/r3/SHA256SUMS-$VER"
 
 mkdir -p "$CHAN/r4" && cp "$CHAN/good/$TARBALL" "$CHAN/r4/"
 UPPER=$(printf '%s' "$HASH" | tr '[:lower:]' '[:upper:]')
-printf '%s  %s\n' "$UPPER" "$TARBALL" > "$CHAN/r4/SHA256SUMS"           # uppercase digest
+printf '%s  %s\n' "$UPPER" "$TARBALL" > "$CHAN/r4/SHA256SUMS-$VER"           # uppercase digest
+sign_manifest "$CHAN/r4/SHA256SUMS-$VER"
 
 mkdir -p "$CHAN/r5" && cp "$CHAN/good/$TARBALL" "$CHAN/r5/"
 { printf '%s  %s\n' "$HASH" "$TARBALL"; printf '%s  %s\n' "$HASH" "$TARBALL"; } \
-  > "$CHAN/r5/SHA256SUMS"                                               # duplicate merged lines
+  > "$CHAN/r5/SHA256SUMS-$VER"                                               # duplicate merged lines
+sign_manifest "$CHAN/r5/SHA256SUMS-$VER"
 
 mkdir -p "$CHAN/r6" && cp "$CHAN/good/$TARBALL" "$CHAN/r6/"
 { printf '%s  %s\n' "$HASH" "$TARBALL"; printf '%s  %s\n' "$WRONG" "$TARBALL"; } \
-  > "$CHAN/r6/SHA256SUMS"                                               # two disagreeing lines
+  > "$CHAN/r6/SHA256SUMS-$VER"                                               # two disagreeing lines
+sign_manifest "$CHAN/r6/SHA256SUMS-$VER"
 
 mkdir -p "$CHAN/r7" && cp "$CHAN/good/$TARBALL" "$CHAN/r7/"
-printf '%s *%s\n' "$HASH" "$TARBALL" > "$CHAN/r7/SHA256SUMS"            # binary-mode marker
+printf '%s *%s\n' "$HASH" "$TARBALL" > "$CHAN/r7/SHA256SUMS-$VER"            # binary-mode marker
+sign_manifest "$CHAN/r7/SHA256SUMS-$VER"
 
-mkdir -p "$CHAN/r8" && cp "$CHAN/good/$TARBALL" "$CHAN/r8/" && cp "$CHAN/good/SHA256SUMS" "$CHAN/r8/"
+mkdir -p "$CHAN/r8" && cp "$CHAN/good/$TARBALL" "$CHAN/r8/" && cp "$CHAN/good/SHA256SUMS-$VER"* "$CHAN/r8/"
 printf '<html><body>502 Bad Gateway</body></html>' > "$CHAN/r8/VERSION" # HTML-200 garbage
 
 # r9 deliberately reuses "good" (no VERSION file there) without a pin.
 # r10 reuses "good" too, WITH a pin — proves no VERSION round-trip.
+
+# r14: only the merged, unsigned index — the installer must not fall back to it
+mkdir -p "$CHAN/r14" && cp "$CHAN/good/$TARBALL" "$CHAN/r14/"
+printf '%s  %s\n' "$HASH" "$TARBALL" > "$CHAN/r14/SHA256SUMS"
+# r15: the channel names a release older than the installer's floor
+mkdir -p "$CHAN/r15" && printf '0.9.0' > "$CHAN/r15/VERSION"
 
 # ── serve it
 PORT=$((20000 + $$ % 20000))
@@ -89,7 +120,7 @@ cleanup() { kill "$SERVER_PID" 2>/dev/null || :; rm -rf "$WORK"; }
 trap cleanup EXIT INT TERM
 
 i=0
-while ! curl -fsS -o /dev/null "http://127.0.0.1:$PORT/good/SHA256SUMS" 2>/dev/null; do
+while ! curl -fsS -o /dev/null "http://127.0.0.1:$PORT/good/SHA256SUMS-$VER" 2>/dev/null; do
   i=$((i + 1))
   [ "$i" -lt 50 ] || { echo "fake channel never came up" >&2; exit 1; }
   sleep 0.1
@@ -157,6 +188,23 @@ if tail -n +$((log_before + 1)) "$WORK/server.log" | grep -q "GET /good/VERSION"
 else
   echo "  ok 10-camy-version-pin: no /VERSION round-trip"
   PASS=$((PASS + 1))
+fi
+
+run_case "14-no-signed-manifest"     r14  "$VER" 1 "no signed manifest"
+run_case "15-rolled-back-version"    r15  ""     1 "older than the v"
+
+# rows 16-18: the signature path's failures (the success path runs in every
+# row above whenever minisign is installed).
+if [ -n "$SIGN" ]; then
+  mkdir -p "$CHAN/r16" && cp "$CHAN/good/$TARBALL" "$CHAN/good/SHA256SUMS-$VER"* "$CHAN/r16/"
+  mkdir -p "$CHAN/r17" && cp "$CHAN/good/$TARBALL" "$CHAN/good/SHA256SUMS-$VER" "$CHAN/r17/"
+  minisign -S -s "$WORK/other.sec" -m "$CHAN/r17/SHA256SUMS-$VER" -x "$CHAN/r17/SHA256SUMS-$VER.minisig" >/dev/null 2>&1
+  mkdir -p "$CHAN/r18" && cp "$CHAN/good/$TARBALL" "$CHAN/good/SHA256SUMS-$VER" "$CHAN/r18/"
+  run_case "16-good-signature"         r16  "$VER" 0 "signature and checksum verified"
+  run_case "17-foreign-key-signature"  r17  "$VER" 1 "not signed by camy's release key"
+  run_case "18-signature-missing"      r18  "$VER" 1 "release signature is missing"
+else
+  echo "  -- 16-18 signature rows skipped: minisign is not installed"
 fi
 
 # row 1, continued: exact mode + content, not just exit code
@@ -234,7 +282,8 @@ printf 'fake-gz' > "$docs_payload/manpages/camy.1.gz"
 tar -C "$docs_payload" -czf "$CHAN/withdocs/$TARBALL" camy completions manpages
 DHASH=$(shasum -a 256 "$CHAN/withdocs/$TARBALL" 2>/dev/null | awk '{print $1}')
 [ -n "$DHASH" ] || DHASH=$(sha256sum "$CHAN/withdocs/$TARBALL" | awk '{print $1}')
-printf '%s  %s\n' "$DHASH" "$TARBALL" > "$CHAN/withdocs/SHA256SUMS"
+printf '%s  %s\n' "$DHASH" "$TARBALL" > "$CHAN/withdocs/SHA256SUMS-$VER"
+sign_manifest "$CHAN/withdocs/SHA256SUMS-$VER"
 
 xdg_data="$WORK/xdg-data-13"
 xdg_config="$WORK/xdg-config-13"

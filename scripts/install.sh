@@ -25,13 +25,30 @@
 #   CAMY_NO_MODIFY_PATH  set to 1 to leave shell rc files and symlinks alone
 #   CAMY_DL_BASE         alternate download base URL, for local or air-gapped
 #                        mirrors (default https://dl.camy.sh/stable)
+#   CAMY_REQUIRE_SIGNATURE
+#                        set to 1 to refuse to install unless minisign is
+#                        available to verify the release signature
 #
-# What this script verifies: the tarball's SHA-256 against the release's
-# SHA256SUMS, both fetched over TLS from the same channel. Every release also
-# publishes a cosign- and minisign-signed per-version manifest beside it for
-# anyone verifying by hand; see docs/verifying-releases.md in
-# github.com/trycamy/cli.
+# What this script verifies: the release's own signed manifest,
+# SHA256SUMS-<version>, is fetched over TLS and, when minisign is installed,
+# verified against the camy release public key built into this script; the
+# tarball's SHA-256 is then checked against that manifest. Without minisign
+# the install is TLS plus checksum, and the summary says so. The channel's
+# VERSION is refused when it names something older than this installer
+# knows, so a rolled-back channel cannot steer a fresh install onto an old
+# release. See docs/verifying-releases.md in github.com/trycamy/cli.
 set -eu
+
+# The minisign public key every camy release manifest is signed with. It is
+# the same key published in docs/verifying-releases.md and compiled into the
+# camy binary for `camy update`; rotate all of them together.
+MINISIGN_PUB="RWT7bpmBcMfiVQvo6BbIeVDh7f9B8WbapvOEBzs7TxhSkLsjlySfxXG6"
+# The oldest release the channel may name. A rolled-back VERSION passes every
+# checksum and signature check, because the older release is genuine; this
+# floor is what refuses it. It is the PREVIOUS release, not the one shipping:
+# the publish job uploads this script a moment before it flips VERSION, and
+# the floor must not refuse the version still current in that moment.
+MIN_VERSION="1.0.0"
 
 # ── terminal colors ────────────────────────────────────────────────────────
 # Color is only ever put on individual words (the "camy" wordmark, a
@@ -55,6 +72,35 @@ say()  { printf '%s\n' "$*" >&2; }
 row()  { printf '  %s %-34s %s\n' "$1" "$2" "${LATTE}$3${R}" >&2; }
 fail() { printf '  %s %s\n' "${RUST}x${R}" "$*" >&2; exit 1; }
 
+# version_below A B: true when A is an older release than B, comparing the
+# three numeric fields and ignoring anything after them.
+version_below() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    n = split(a, x, "."); m = split(b, y, ".")
+    for (i = 1; i <= 3; i++) { p = (i <= n) ? x[i] + 0 : 0; q = (i <= m) ? y[i] + 0 : 0
+      if (p < q) exit 0; if (p > q) exit 1 }
+    exit 1 }'
+}
+
+# verify_signature MANIFEST URL-OF-MINISIG: with minisign installed, the
+# manifest must carry a valid signature from the camy release key, or nothing
+# is installed. Without minisign the install is checksum-only, which the
+# summary row says plainly; CAMY_REQUIRE_SIGNATURE=1 turns that into a
+# refusal. Sets SIGNED=1 when the signature verified.
+verify_signature() {
+  SIGNED=""
+  if command -v minisign >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    curl -fsSL --retry 2 --retry-delay 1 $proto_pin -o "$1.minisig" "$2" || \
+      fail "the release signature is missing — refusing to install unverified binaries"
+    minisign -Vq -m "$1" -x "$1.minisig" -P "$MINISIGN_PUB" >/dev/null 2>&1 || \
+      fail "the release manifest is not signed by camy's release key — not installing (a tampered mirror? report it at camy.ai/support)"
+    SIGNED=1
+  elif [ "${CAMY_REQUIRE_SIGNATURE:-}" = "1" ]; then
+    fail "CAMY_REQUIRE_SIGNATURE=1 but minisign isn't installed — install minisign and retry"
+  fi
+}
+
 main() {
   DL_BASE="${CAMY_DL_BASE:-https://dl.camy.sh/stable}"
   INSTALL_DIR="${CAMY_INSTALL_DIR:-$HOME/.local/bin}"
@@ -73,6 +119,10 @@ main() {
       *) fail "couldn't read the latest version from $DL_BASE/VERSION — check your connection and retry, or pin one:
      curl -fsSL https://camy.ai/cli/install.sh | CAMY_VERSION=x.y.z sh" ;;
     esac
+    # a deliberate CAMY_VERSION pin is the user's call and skips this floor
+    if version_below "$VERSION" "$MIN_VERSION"; then
+      fail "the channel offered v$VERSION, older than the v$MIN_VERSION this installer knows — refusing (a rolled-back mirror? retry later, or pin a version deliberately with CAMY_VERSION)"
+    fi
   fi
 
   os=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -107,9 +157,13 @@ main() {
   # shellcheck disable=SC2086
   curl -fL $bar --retry 2 --retry-delay 1 $proto_pin -o "$tmp/$tarball" "$DL_BASE/$tarball" || \
     fail "download failed — is $DL_BASE reachable?"
+  # The manifest is the release's own SHA256SUMS-<version>: the exact bytes
+  # the release signed, never the merged index, which nothing signs.
+  manifest="SHA256SUMS-$VERSION"
   # shellcheck disable=SC2086
-  curl -fsSL --retry 2 --retry-delay 1 $proto_pin -o "$tmp/SHA256SUMS" "$DL_BASE/SHA256SUMS" || \
-    fail "checksums missing — refusing to install unverified binaries"
+  curl -fsSL --retry 2 --retry-delay 1 $proto_pin -o "$tmp/$manifest" "$DL_BASE/$manifest" || \
+    fail "no signed manifest for v$VERSION on $DL_BASE — refusing to install unverified binaries"
+  verify_signature "$tmp/$manifest" "$DL_BASE/$manifest.minisig"
 
   # Verify by computing our own digest and comparing strings — never by a
   # tool's `-c` exit code. Darwin ships its own /sbin/sha256sum (not GNU
@@ -122,17 +176,22 @@ main() {
   # collapses the duplicate lines a hand-merged SHA256SUMS can carry, while
   # two DISAGREEING entries survive as two lines, which the hex-only check
   # and the 64-character length check below both reject.
-  want=$(awk -v f="$tarball" '$2 == f || $2 == "*" f { print tolower($1) }' "$tmp/SHA256SUMS" | sort -u)
+  want=$(awk -v f="$tarball" '$2 == f || $2 == "*" f { print tolower($1) }' "$tmp/$manifest" | sort -u)
   case "$want" in *[!0-9a-f]*|"") want="" ;; esac
   [ "${#want}" -eq 64 ] || \
-    fail "no usable checksum for $tarball in SHA256SUMS — refusing to install unverified binaries"
+    fail "no usable checksum for $tarball in $manifest — refusing to install unverified binaries"
   got=$( { shasum -a 256 "$tmp/$tarball" 2>/dev/null || sha256sum "$tmp/$tarball" 2>/dev/null; } | awk '{print tolower($1)}')
   [ -n "$got" ] || fail "no sha256 tool found (need shasum or sha256sum) — refusing to install unverified binaries"
   [ "$got" = "$want" ] || fail "checksum verification FAILED — not installing"
 
   size=$(wc -c < "$tmp/$tarball" | tr -d ' ')
   size_mb=$(awk "BEGIN{printf \"%.1f\", $size/1048576}")
-  row "$OKM" "$tarball" "${size_mb} MB · checksum verified"
+  if [ -n "$SIGNED" ]; then
+    row "$OKM" "$tarball" "${size_mb} MB · signature and checksum verified"
+  else
+    row "$OKM" "$tarball" "${size_mb} MB · checksum verified"
+    row "$DIMI" ""        "minisign not installed — signature not checked · brew install minisign"
+  fi
 
   tar -xzf "$tmp/$tarball" -C "$tmp" || fail "couldn't unpack $tarball"
   [ -f "$tmp/camy" ] || fail "no camy binary in $tarball — not installing"
