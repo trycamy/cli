@@ -1,6 +1,21 @@
 ## camy update
 
-Update camy in place — checksum-verified from the release channel
+Update camy in place — signature-verified from the release channel
+
+### Synopsis
+
+Update camy in place from the release channel.
+
+camy fetches the release manifest for the new version and verifies its
+minisign signature against a public key built into this binary, then checks
+the downloaded tarball against the hash that signed manifest carries. If the
+signature is missing, or is not by camy's release key, nothing is installed
+and the binary you are running stays exactly as it is.
+
+  camy update --check          # report what's out there, install nothing
+  camy update --channel stable # stable (default) or canary
+
+Installs managed by Homebrew or npm are left to their package manager.
 
 ```
 camy update [flags]

@@ -57,7 +57,7 @@ camy [flags]
 * [camy sweep](camy_sweep.md)	 - The inbox dial — off · shadow · suggest · auto
 * [camy tasks](camy_tasks.md)	 - Quick to-dos, tracked by the same mind that reads your calendar
 * [camy uninstall](camy_uninstall.md)	 - Remove the binary; asks before touching config, state, or your keychain
-* [camy update](camy_update.md)	 - Update camy in place — checksum-verified from the release channel
+* [camy update](camy_update.md)	 - Update camy in place — signature-verified from the release channel
 * [camy version](camy_version.md)	 - Print version
 * [camy vm](camy_vm.md)	 - Your dedicated cloud workspace
 * [camy webhooks](camy_webhooks.md)	 - Endpoints, deliveries, synthetic triggers, dead-letter replay

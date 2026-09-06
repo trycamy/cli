@@ -62,12 +62,13 @@ jobs:
             https://dl.camy.sh/install -o "$RUNNER_TEMP/live-install.sh"
           diff -u "$RUNNER_TEMP/live-install.sh" scripts/install.sh
 
-  # The merged index the installer once trusted is unsigned; the per-version
-  # manifests are signed. Nothing else compares them, so this read-only job
-  # does, on every push and weekly: every line of the merged index must
-  # match the signed manifest of its version, and every version on the
-  # channel must have one. A mismatch means the channel changed outside a
-  # release.
+  # The merged index is unsigned; the per-version manifests are signed.
+  # Nothing else compares them, so this read-only job does, on every push
+  # and weekly: every line of the merged index must appear verbatim in the
+  # signed manifest of its version, and every version in the index must have
+  # one. (A manifest may list more than the index does: a withdrawn file is
+  # dropped from the index, never from the signed manifest.) A line that
+  # disagrees means the channel changed outside a release.
   index:
     name: Channel index matches the signed manifests
     runs-on: ubuntu-latest
@@ -82,9 +83,10 @@ jobs:
           bad=0
           for v in $(awk '{print $2}' index | sed -nE 's/^camy_([0-9][^_]*)_.*/\1/p' | sort -uV); do
             if ! get "$C/SHA256SUMS-$v" -o "manifest-$v"; then echo "::error::no signed manifest for $v on the channel"; bad=1; continue; fi
-            grep "_${v}_" index | sort -k2 > "index-$v"
-            grep -v '^#' "manifest-$v" | sort -k2 > "signed-$v"
-            if ! diff -u "signed-$v" "index-$v"; then echo "::error::the merged index disagrees with SHA256SUMS-$v"; bad=1; fi
+            grep -v '^#' "manifest-$v" > "signed-$v"
+            while read -r line; do
+              grep -qxF "$line" "signed-$v" || { echo "::error::index line not in SHA256SUMS-$v: $line"; bad=1; }
+            done < <(grep "_${v}_" index)
           done
           [ "$bad" = 0 ] && echo "index matches every signed manifest"
     runs-on: ubuntu-latest

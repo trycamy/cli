@@ -9,7 +9,7 @@ change to either that is not backward compatible bumps the major version.
 Each GitHub Release on this repository carries the same notes as its section
 below, plus the signed checksums for that version.
 
-## 1.0.1 — unreleased
+## 1.0.1 — 2026-09-06
 
 This update adds a credit balance and a live run gauge to `camy status`,
 brings camy to npm, and includes stability, security, and supply-chain
