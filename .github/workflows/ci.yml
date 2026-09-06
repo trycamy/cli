@@ -89,6 +89,9 @@ jobs:
             done < <(grep "_${v}_" index)
           done
           [ "$bad" = 0 ] && echo "index matches every signed manifest"
+
+  docs:
+    name: Docs links
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
