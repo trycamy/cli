@@ -4,11 +4,21 @@
 # that is already on the registry is skipped, so re-runs are safe. In CI the
 # workflow's OIDC identity is the credential (npm trusted publishing) and
 # --provenance attaches a build attestation; locally, your npm login is used.
+# --stage uses `npm stage publish`: the versions land in the registry's
+# staging area and a maintainer approves each one on npmjs.com (2FA) before
+# it is public. That is how the release mirror publishes.
 #
-#   sh scripts/publish-npm.sh [--provenance]
+#   sh scripts/publish-npm.sh [--provenance] [--stage]
 set -eu
 ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
-FLAGS="--access public ${1:-}"
+FLAGS="--access public"; CMD="publish"
+for a in "$@"; do
+  case "$a" in
+    --provenance) FLAGS="$FLAGS --provenance" ;;
+    --stage) CMD="stage publish" ;;
+    *) echo "unknown flag: $a" >&2; exit 2 ;;
+  esac
+done
 for pkg in cli-darwin-arm64 cli-darwin-x64 cli-linux-arm64 cli-linux-x64 camy; do
   dir="$ROOT/npm/out/$pkg"
   name=$(node -p "require('$dir/package.json').name"); version=$(node -p "require('$dir/package.json').version")
@@ -24,5 +34,6 @@ for pkg in cli-darwin-arm64 cli-darwin-x64 cli-linux-arm64 cli-linux-x64 camy; d
     if [ "$ours" = "$theirs" ]; then echo "$name@$version already published with these bytes; skipping" >&2; continue; fi
     echo "$name@$version is already on the registry with DIFFERENT contents — refusing to continue" >&2; exit 1
   fi
-  (cd "$dir" && npm publish $FLAGS)
+  # shellcheck disable=SC2086
+  (cd "$dir" && npm $CMD $FLAGS)
 done
