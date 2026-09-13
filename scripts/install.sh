@@ -48,7 +48,7 @@ MINISIGN_PUB="RWT7bpmBcMfiVQvo6BbIeVDh7f9B8WbapvOEBzs7TxhSkLsjlySfxXG6"
 # floor is what refuses it. It is the PREVIOUS release, not the one shipping:
 # the publish job uploads this script a moment before it flips VERSION, and
 # the floor must not refuse the version still current in that moment.
-MIN_VERSION="1.0.0"
+MIN_VERSION="1.0.1"
 
 # ── terminal colors ────────────────────────────────────────────────────────
 # Color is only ever put on individual words (the "camy" wordmark, a
