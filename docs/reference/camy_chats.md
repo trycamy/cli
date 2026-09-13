@@ -30,6 +30,7 @@ camy chats [flags]
       --profile string            profile to use (env CAMY_PROFILE)
   -q, --quiet                     suppress non-data stderr
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
 ```
@@ -39,5 +40,6 @@ camy chats [flags]
 * [camy](camy.md)	 - Camy in your terminal — the same agent, memory, and cloud computer you run at camy.ai
 * [camy chats export](camy_chats_export.md)	 - Portable markdown to stdout
 * [camy chats list](camy_chats_list.md)	 - Your chat sessions — newest first
+* [camy chats prune](camy_chats_prune.md)	 - Delete sessions with no messages (the current chat and agent chats are kept)
 * [camy chats show](camy_chats_show.md)	 - Render a transcript
 

@@ -33,4 +33,6 @@ Every guide is here, in reading order.
 
 - [Terminal output and accessibility](terminal.md) — color, `NO_COLOR`, `--accessible`, paging, links, inline images
 - [Troubleshooting](troubleshooting.md) — [`camy doctor`](reference/camy_doctor.md), common errors, update problems
+- [Your Mac as a device](device.md) — Camy.app, the resident agent, scopes, the ledger
+- [Connectors](connectors.md) — the accounts and servers Camy may act through
 - [Verifying releases](verifying-releases.md) — checksums, signatures, SLSA provenance, SBOMs, the release channel layout

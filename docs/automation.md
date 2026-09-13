@@ -159,12 +159,19 @@ what a real create would use.
 ```bash
 camy schedule pause 9f8e7d6c
 camy schedule delete 9f8e7d6c
+camy schedule update <agent-id> --cron "0 8 * * *" --tz America/Chicago --channels thread,email
+camy schedule run-now <agent-id>
 ```
 
 `ID` accepts a short prefix, resolved against both stores together.
 `pause` only works on schedules you created with `schedule create` — an
 agent-created schedule can't be paused, and trying gives a usage error
 pointing at `delete` instead.
+
+`update` and `run-now` act on a scheduled agent, the kind created on the
+Operators page, and take its full id rather than a prefix. `update` changes
+its cron, timezone, or delivery channels in place; `run-now` fires it
+outside its cron, on the next tick, about 30 seconds later.
 
 `delete` works on either kind: it cancels an agent-created schedule or
 deletes a `schedule create` one, whichever the id resolves to. It asks for

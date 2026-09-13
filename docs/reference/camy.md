@@ -25,6 +25,7 @@ camy [flags]
       --profile string            profile to use (env CAMY_PROFILE)
   -q, --quiet                     suppress non-data stderr
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
   -V, --version                   print version
@@ -41,6 +42,8 @@ camy [flags]
 * [camy chat](camy_chat.md)	 - Talk to your agent — streams the reply and every tool call
 * [camy chats](camy_chats.md)	 - Sessions: list, show, export
 * [camy config](camy_config.md)	 - Settings — get, set, unset, list, edit
+* [camy connectors](camy_connectors.md)	 - Your connections — accounts, servers, and what each may do
+* [camy device](camy_device.md)	 - Link this computer to your Camy account and run as a resident agent
 * [camy docs](camy_docs.md)	 - The reference, in your terminal
 * [camy doctor](camy_doctor.md)	 - Diagnostics with fixes — exit 1 if anything fails
 * [camy download](camy_download.md)	 - Save a chat attachment to disk — the handle every 📎 receipt prints
@@ -49,11 +52,13 @@ camy [flags]
 * [camy integrations](camy_integrations.md)	 - Connected accounts, with health
 * [camy jobs](camy_jobs.md)	 - Durable multi-day jobs — list, show, cancel, run-now
 * [camy keys](camy_keys.md)	 - List, rotate, revoke API keys
+* [camy ledger](camy_ledger.md)	 - This device's own record — every call it accepted or refused
 * [camy local](camy_local.md)	 - The local-capability bridge — what Camy may touch on THIS machine
 * [camy mode](camy_mode.md)	 - How deep Camy thinks — agent (full tools) or quick (fast, few tools)
 * [camy profile](camy_profile.md)	 - Profiles: list, use
 * [camy schedule](camy_schedule.md)	 - Cron for your agent — daily, hourly, weekly
 * [camy status](camy_status.md)	 - What's happening right now — approvals, needs-you, jobs, workspace
+* [camy stop](camy_stop.md)	 - Stop the resident agent on this Mac right now — works with no network at all
 * [camy sweep](camy_sweep.md)	 - The inbox dial — off · shadow · suggest · auto
 * [camy tasks](camy_tasks.md)	 - Quick to-dos, tracked by the same mind that reads your calendar
 * [camy uninstall](camy_uninstall.md)	 - Remove the binary; asks before touching config, state, or your keychain

@@ -17,6 +17,7 @@ release tarball.
 | `SHA256SUMS-<version>.pem` | The certificate that signature was made with. | Both |
 | `SHA256SUMS-<version>.minisig` | minisign signature for that manifest. | Both |
 | `camy_<version>.intoto.jsonl` | SLSA build provenance covering the four tarballs, from 1.0.1 on. | Both |
+| `Camy_<version>_darwin.zip` | Camy.app, the notarized Mac application, with a `.sha256` sidecar, from 1.0.2 on. | Both |
 | `SHA256SUMS` | A merged, cumulative checksum index spanning every published version. This is what the installer and `camy update` check downloads against. | Channel only |
 | `VERSION` | The current version as a plain-text string — what the installer and `camy update` read to find the latest release. | Channel only |
 
@@ -228,12 +229,56 @@ jq -r '.components[] | "\(.name) \(.version)"' camy_1.0.0_darwin_arm64.tar.gz.sb
 Use it to check whether a specific dependency or version is present in a given
 release, or to feed your own software-composition scanning.
 
+## macOS: signed and notarized
+
+From 1.0.2, the `camy` binary for macOS inside each tarball carries an
+Apple Developer ID code signature and is notarized with Apple. The installer
+and `camy update` never needed this, because a file fetched with `curl`
+carries no quarantine flag; what it fixes is a tarball downloaded in a
+browser and unpacked by Finder, which macOS would otherwise refuse to run.
+A standalone executable cannot carry a stapled ticket, so Gatekeeper fetches
+the notarization ticket from Apple the first time the binary runs.
+
+To check a binary yourself:
+
+```bash
+codesign --verify --strict --verbose=2 camy
+codesign -dv --verbose=2 camy 2>&1 | grep -E 'Authority=|TeamIdentifier'
+```
+
+Expect `satisfies its Designated Requirement` from the first, and from the
+second `Authority=Developer ID Application: CamyAI Inc. (8AKMTS9968)`
+followed by Apple's intermediate and root. (`spctl --assess` is the wrong
+tool for a standalone executable; it reports "does not seem to be an app"
+for every command-line binary, notarized or not.)
+
+## Camy.app
+
+From 1.0.2, each release also publishes `Camy_<version>_darwin.zip`, the
+Mac application that [runs Camy as a device](device.md). It holds the same
+`camy` binary as the tarballs, as a universal build, inside a bundle that is
+code-signed with Apple Developer ID, notarized, and stapled. Its integrity
+is the `.sha256` sidecar beside it plus Apple's notarization; it is not
+listed in the signed manifest. To check a downloaded copy:
+
+```bash
+shasum -a 256 -c Camy_1.0.2_darwin.zip.sha256
+unzip -q Camy_1.0.2_darwin.zip
+spctl -a -t exec -vv Camy.app
+xcrun stapler validate Camy.app
+```
+
+Expect `accepted` with `source=Notarized Developer ID` from `spctl`, which
+does assess application bundles, and `The validate action worked` from
+`stapler`.
+
 ## Reproducible builds
 
 Release builds are compiled with `-trimpath` and `CGO_ENABLED=0`, and the
 binary's timestamp inside the tarball is taken from the tagged commit rather
 than the build time. Two builds of the same commit for the same
-`GOOS`/`GOARCH` produce the same `camy` binary. The CLI's source is not
+`GOOS`/`GOARCH` produce the same Linux `camy` binary; the macOS binaries
+differ only by the code-signature block Apple's timestamp service dates. The CLI's source is not
 published, so this describes how releases are built rather than a check you
 can run today.
 

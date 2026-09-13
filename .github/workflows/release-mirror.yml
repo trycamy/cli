@@ -126,6 +126,16 @@ jobs:
                 --source-uri "$SOURCE" --source-tag "v$V"
             done
           fi
+          # The notarized Camy.app bundle, published from 1.0.2 on beside the
+          # tarballs. Its integrity is the sha256 sidecar plus Apple's own
+          # notarization; it is not in the signed manifest.
+          if get "Camy_${V}_darwin.zip.sha256"; then
+            get "Camy_${V}_darwin.zip"
+            want=$(awk '{print $1}' "Camy_${V}_darwin.zip.sha256"); got=$(sha256sum "Camy_${V}_darwin.zip" | cut -d' ' -f1)
+            [ "$want" = "$got" ] || { echo "::error::Camy_${V}_darwin.zip does not match its sha256 sidecar"; exit 1; }
+          else
+            echo "::notice::no Camy.app bundle published for $V"
+          fi
           ls -la
 
       # The npm job builds from these exact bytes, not from a second download.

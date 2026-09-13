@@ -220,7 +220,11 @@ camy chats
 camy chats list --all
 camy chats show 2f1c9ab3
 camy chats export 2f1c9ab3 > transcript.md
+camy chats prune
 ```
+
+`prune` deletes the sessions that never got a message; the current chat and
+agent chats are kept.
 
 `camy chats` (or `camy chats list`) lists your sessions newest first, 25 at
 a time by default. The two paging flags live on the subcommand: `camy chats
@@ -294,9 +298,10 @@ Two flags change how the app draws without changing what it can do:
   REPL instead: no redraws, no spinners, no boxes.
 
 The REPL's slash set is the same one, minus `/compact` and the app's
-`/chats show ID` form, and plus `/last`, which prints the current chat id:
+`/chats show ID` form, and plus `/last`, which prints the current chat id, and `/attach` (also
+`/resume`), which rejoins a detached or dropped turn:
 `/new`, `/chat ID`, `/mode`, `/approvals`, `/inbox`, `/status`, `/jobs`,
-`/vm`, `/chats`, `/last`, `/help`, and `/quit` (also `/exit` and `/q`, which
+`/vm`, `/chats`, `/last`, `/attach`, `/help`, and `/quit` (also `/exit` and `/q`, which
 work in the full-screen app too).
 
 Each of those delegates to the same one-shot logic
@@ -352,9 +357,11 @@ Full flag reference: [camy mode](reference/camy_mode.md).
 When a chat runs with the [local bridge](local-bridge.md) live against your
 project — not against the cloud workspace — camy looks for an `AGENTS.md`
 file at the project root and, if that's not there, a `CLAUDE.md`, and sends
-its contents along as project instructions for the turn. The content is
-sent to the server as data for the turn, not as instructions the model
-blindly follows.
+its contents along as project instructions for the turn, together with your
+own `~/.camy/AGENTS.md` when you keep one. The content is sent to the server
+as data for the turn, not as instructions the model blindly follows; see
+[Project instructions](local-bridge.md#project-instructions) for how the two
+files combine.
 
 Only a plain regular file qualifies. A symlink or a hard link at that path
 is refused outright, even one pointing at an ordinary file inside the

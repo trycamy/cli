@@ -82,6 +82,7 @@ invocation.
 |---|---|---|
 | `--no-local` | `CAMY_NO_LOCAL=1` | Disables the bridge entirely for this session. No read tools, no write tools — the agent cannot touch this machine at all. |
 | `--read-only` | `CAMY_LOCAL_READONLY=1` | Keeps the read tools; turns off `run_command` and `write_file` for this session. |
+| `--sandbox off\|observe\|enforce` | `CAMY_LOCAL_SANDBOX` | How `run_command` is confined by the operating system, this session only. `observe` (the default) runs commands unconfined and reports that; `enforce` refuses writes outside the project root, through Seatbelt on macOS and Landlock or bubblewrap on Linux, and falls back to `observe` with a stated reason where the OS cannot enforce it. `camy --version` prints the posture, and `camy --version --json` carries it as `local_sandbox`. |
 | `--cloud` | `CAMY_CLOUD=1` | Defaults a plain turn to your workspace instead of this machine. Does **not** turn the bridge off — the tools stay available to the agent if it reaches for them — but it does stop `AGENTS.md`/`CLAUDE.md` discovery (see [Project instructions](#project-instructions)). |
 | `--no-project-instructions` | `CAMY_NO_PROJECT_INSTRUCTIONS=1` | Skips `AGENTS.md`/`CLAUDE.md` discovery, independent of `--cloud`. |
 
@@ -293,13 +294,26 @@ treated differently from inline code. It is ordinary dev workflow, so it is
 not refused outright. It can never be trusted or auto-run, as
 [Trust](#trust) describes.
 
-### Not a sandbox
+### The boundary, and the sandbox
 
 The project-root boundary scopes the paths the tools resolve: a read target,
-a write destination, a command's working directory. It does not sandbox a
-command once you approve it. `run_command` starts a real process under your
-user account, and that process can reach anything your account can. The
-floor above is a blast-radius limit, not a container.
+a write destination, a command's working directory. On its own it does not
+confine a command once you approve it: `run_command` starts a real process
+under your user account, and the floor above is a blast-radius limit, not a
+container.
+
+`--sandbox enforce` (or `CAMY_LOCAL_SANDBOX=enforce`) adds an operating
+system boundary on top: the process cannot write outside the project root,
+through Seatbelt on macOS and Landlock or bubblewrap on Linux. The default,
+`observe`, leaves commands unconfined, and `enforce` falls back to `observe`
+with a stated reason on a system that cannot enforce it. Reads are not
+confined either way. `camy --version` prints the posture in effect, and
+`camy --version --json` carries it as `local_sandbox`.
+
+A command can also be started in the background: it keeps running after
+the turn that started it ends, and the approval card says so before you
+answer. Ask in the chat for a background job's status or output, or to
+cancel it.
 
 The child process does get a trimmed environment. Only `PATH`, `HOME`,
 `LANG`, `TERM`, `TMPDIR`, and `SHELL` are passed through, so camy's own
@@ -312,9 +326,14 @@ reads it on each chat connection and sends its content to the server as part
 of starting the chat, so the agent has your project's own instructions in
 context. A mid-session reconnect re-reads the file.
 
-Only one file is sent: `AGENTS.md` is preferred, and `CLAUDE.md` is read
-only when there is no `AGENTS.md`. Only the project root is checked, not
-subdirectories, and the file is capped at 16 KB.
+Your own standing instructions come along too: a `~/.camy/AGENTS.md` holds
+the conventions you want in every project, and it is sent alongside the
+project's file, each labeled as what it is. The project's file is the more
+specific of the two, and where the two disagree the agent is asked to say
+which one it followed. At the project root `AGENTS.md` is preferred and
+`CLAUDE.md` is read only when there is no `AGENTS.md`; only the root is
+checked, not subdirectories, and the files are capped at 16 KB together,
+with your personal file trimmed first.
 
 Discovery fails closed rather than take a risk: a symlink — even one that
 points back inside the project — or a hard-linked file is refused rather

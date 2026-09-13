@@ -1,0 +1,44 @@
+## camy device
+
+Link this computer to your Camy account and run as a resident agent
+
+### Options
+
+```
+  -h, --help   help for device
+```
+
+### Options inherited from parent commands
+
+```
+      --accessible                linear output: no spinners, boxes, or redraws
+      --api-url string            API origin override (env CAMY_API_URL)
+      --cloud                     use the cloud VM as the default workspace even when the local bridge is live (env CAMY_CLOUD=1)
+      --color string              auto|always|never (default "auto")
+  -f, --force                     skip destructive-operation prompts (headless)
+      --inline                    classic scrollback app instead of the full-screen surface (env CAMY_INLINE=1)
+      --jq string                 filter --json output with a jq expression (built in)
+      --json                      machine output: stable JSON / NDJSON streams
+      --no-input                  never prompt: checkpoints fail closed (exit 4), other prompts exit 2
+      --no-local                  disable the local bridge entirely for this session (env CAMY_NO_LOCAL=1)
+      --no-pager                  never page output
+      --no-project-instructions   never read this project's AGENTS.md/CLAUDE.md into the chat session (env CAMY_NO_PROJECT_INSTRUCTIONS=1)
+      --profile string            profile to use (env CAMY_PROFILE)
+  -q, --quiet                     suppress non-data stderr
+      --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
+      --template string           format --json output with a Go template
+  -v, --verbose                   request ids + timings
+```
+
+### SEE ALSO
+
+* [camy](camy.md)	 - Camy in your terminal — the same agent, memory, and cloud computer you run at camy.ai
+* [camy device enroll](camy_device_enroll.md)	 - Link this Mac to your Camy account — zero capabilities until you grant one
+* [camy device forget](camy_device_forget.md)	 - Forget this Mac's link locally — its key, record and trail
+* [camy device install](camy_device_install.md)	 - Install the resident agent as a per-user LaunchAgent (macOS, from the Camy app)
+* [camy device logs](camy_device_logs.md)	 - The resident agent's own stdout/stderr
+* [camy device scope](camy_device_scope.md)	 - Grant, remove, or list what a linked computer may touch
+* [camy device status](camy_device_status.md)	 - This Mac's link to Camy — state, mode, scopes, last contact
+* [camy device uninstall](camy_device_uninstall.md)	 - Stop and remove the resident agent's LaunchAgent
+

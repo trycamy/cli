@@ -9,6 +9,55 @@ change to either that is not backward compatible bumps the major version.
 Each GitHub Release on this repository carries the same notes as its section
 below, plus the signed checksums for that version.
 
+## 1.0.2 — 2026-09-13
+
+Camy now runs on your Mac as a resident agent, connectors have a home in
+the CLI, and every release ships signed and notarized macOS binaries.
+
+**New**
+
+- Adds `camy device`: link your Mac to your account, grant it read or write
+  access to the folders you choose and, if you want, the terminal, and let
+  it work in the background. `camy stop` halts it at once and `camy ledger`
+  lists everything it accepted or refused. See
+  [Your Mac as a device](docs/device.md).
+- Adds Camy for Mac, the notarized app the resident agent runs from,
+  published with each release as `Camy_<version>_darwin.zip`. Everything
+  else works from any install; only linking a Mac and installing the agent
+  need the app. See [Camy for Mac](docs/installation.md#camy-for-mac).
+- Adds `camy connectors` to see the accounts and tool servers Camy acts
+  through, and to check, pause, resume, review, or remove one. Adding still
+  happens on camy.ai. See [Connectors](docs/connectors.md).
+- Adds `camy schedule update` and `camy schedule run-now` for scheduled
+  agents: change the cron, timezone, or channels in place, or fire one on
+  the next tick.
+- Adds `--sandbox` to confine what local commands can write. `enforce`
+  refuses writes outside your project wherever the OS can enforce it; the
+  default, `observe`, leaves commands unconfined. See
+  [The local bridge](docs/local-bridge.md).
+
+**Improvements**
+
+- Creates a chat only when its first message is sent, and adds
+  `camy chats prune` to clear the empty ones left behind.
+- Lets a local command keep running after the turn that started it ends;
+  the approval card says so before you answer.
+- Reads your own `~/.camy/AGENTS.md` alongside a project's `AGENTS.md` or
+  `CLAUDE.md`.
+- `/attach` and `/resume` now work inside the REPL.
+- `camy approvals` and a connector's approval card now name the connection
+  and the action.
+- Fixes edits landing in the wrong place in a file, and duplicated text
+  when the model restarts an answer mid-stream.
+
+**Security**
+
+- Signs and notarizes the macOS binary in every release, so a tarball
+  downloaded in a browser is no longer refused by Gatekeeper. See
+  [Verifying releases](docs/verifying-releases.md#macos-signed-and-notarized).
+- Hardens how camy runs commands on your machine and what an approval card
+  shows before you answer. Updating is recommended.
+
 ## 1.0.1 — 2026-09-06
 
 This update adds a credit balance and a live run gauge to `camy status`,

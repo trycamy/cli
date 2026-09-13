@@ -70,6 +70,9 @@ and treat a pass-through row as something that can gain fields.
 
 Three shapes are worth knowing because they are camy's own, not the server's:
 
+- `local_sandbox` in `camy --version --json` is camy's own: the `--sandbox`
+  mode in effect, the OS mechanism behind it, and whether it is enforced.
+  See [The local bridge](local-bridge.md).
 - `credits` in [`camy status --json`](reference/camy_status.md) is a
   deliberately narrowed object, not the balance endpoint's whole body:
   `plan`, `monthly_remaining`, `daily_remaining`, `daily_max`,

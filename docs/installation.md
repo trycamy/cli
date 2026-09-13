@@ -123,6 +123,18 @@ install and point you at those. Packages are published by this repository's
 own [release workflow](../.github/workflows/release-mirror.yml) from the
 channel's verified tarballs, with npm provenance.
 
+## Camy for Mac
+
+Running Camy [as a device on your own Mac](device.md) needs the Mac
+application, `Camy.app`: a notarized bundle around the same `camy` binary,
+available from 1.0.2 as `Camy_<version>_darwin.zip` on each
+[GitHub Release](https://github.com/trycamy/cli/releases/latest). Unzip it,
+move `Camy.app` to `/Applications` or `~/Applications`, and run
+`camy device install` from it to start the resident agent at every login.
+Every other command on this site works the same from the bundle's `camy` as
+from any other install; linking this Mac and installing the resident agent,
+`camy device enroll` and `camy device install`, insist on the bundle.
+
 ## Manual download
 
 Download a release tarball directly from `https://dl.camy.sh/stable/`.

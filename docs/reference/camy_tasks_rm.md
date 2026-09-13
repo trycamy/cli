@@ -30,6 +30,7 @@ camy tasks rm ID [flags]
       --profile string            profile to use (env CAMY_PROFILE)
   -q, --quiet                     suppress non-data stderr
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
 ```
