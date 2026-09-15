@@ -231,8 +231,9 @@ See [camy inbox snooze](reference/camy_inbox_snooze.md) and
 
 ### Short ids
 
-Every id in this section accepts a prefix of at least 4 characters — the
-same 8 characters `camy inbox` prints in its list.
+Every id in this section accepts the typed short id `camy inbox` prints
+(`em_7f31`), a bare prefix of at least 4 characters of the full id, or the
+full id.
 
 - A prefix under 4 characters is refused outright.
 - A prefix matching nothing is passed through to the API, which reports it

@@ -59,8 +59,34 @@ one of the three puts the whole invocation into machine mode. Machine mode
 also turns the [local bridge](local-bridge.md) off for that run and makes
 every approval fail closed, because machine output must never emit a prompt.
 
-Where a command wraps a server response, the JSON is the server's own shape
-passed through unchanged. [`camy status --json`](reference/camy_status.md)
+### Listings, single things, and ids
+
+Since 1.0.3 the shapes are uniform across commands:
+
+- A **listing** (`camy jobs --json`, `camy inbox --json`, `camy keys --json`,
+  `camy connectors --json`, …) is a JSON **array** of rows — never the
+  server's envelope, and `[]` rather than `null` when it is empty. A
+  partial `--all` sweep that failed mid-way emits
+  `{"partial": true, "results": [...], "rows": N, "error": "..."}` so what
+  was already fetched is never thrown away.
+- A command that **shows one thing** (`camy jobs show ID --json`,
+  `camy approvals show ID --json`, …) emits an **object**.
+- A verb that takes **several ids** (`camy approvals approve A B`,
+  `camy tasks done A B`, `camy inbox archive A B`, …) emits one object when
+  given one id — the shape it always had — and an array of per-id results
+  (`{"ref", "id", "ok", "error"?}`) when given more; the exit code is the
+  worst of the set, and every id is acted on even when one fails.
+- Every id in `--json` is the **full** id. Human output prints typed short
+  ids (`ap_789a`, `em_7f31`, `jb_aab2`, `tk_2b28`, `ob_` for outbox rows);
+  every verb accepts the typed form, a bare prefix of at least four
+  characters, or the full id. `--ids=hex` prints the pre-1.0.3
+  eight-character form in human output for this one release.
+- `--raw` on a listing hands you the endpoint's own body instead of the
+  array, for the wire shape; it does not apply to `--all` sweeps, and
+  `camy approvals --json` stays narrowed (see below) with or without it.
+
+Where a command wraps a server response that is not a listing, the JSON is
+the server's own shape passed through unchanged. [`camy status --json`](reference/camy_status.md)
 gives you `approvals`, `inbox_counts`, `jobs`, `workspace`, `credits` and
 `run_meter`; what is inside them is defined by the API, not by the CLI, with
 `credits` the one exception below. `run_meter` holds context and credit usage

@@ -39,7 +39,7 @@
     <img src="docs/assets/camy-chat.png" alt="A camy chat: the agent reads the inbox and calendar, answers, and pauses on an approval before a payment; the human types y and the turn resumes." width="760">
   </picture>
   <br>
-  <sub>Ask. It reads, it answers, and it stops at the amber box until you say <code>y</code>. Real output, sample data.</sub>
+  <sub>Ask. It reads, it answers, and it stops at the amber card until you say <code>y</code>. Real output, sample data.</sub>
 </p>
 
 <br>

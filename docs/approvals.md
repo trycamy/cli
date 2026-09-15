@@ -52,12 +52,17 @@ the same 8 characters `camy approvals` prints in its list.
 ```bash
 camy approvals
 camy approvals --web
-camy approvals show a1b2c3d4
+camy approvals show ap_789a
 ```
 
-[`camy approvals`](reference/camy_approvals.md) prints one line per pending
-checkpoint: a short id, a label (the tool name when there is one, otherwise
-the start of the prompt), how long ago it arrived, and a one-line summary.
+[`camy approvals`](reference/camy_approvals.md) groups what is waiting by
+what the decision is — NEEDS AN ANSWER, WANTS TO RUN SOMETHING, WANTS TO
+SEND SOMETHING — one line per checkpoint: a typed short id (`ap_789a`),
+what it wants in plain words, the detail, where the bite would land and how
+bad (`⌂ local · reversible`, `☁ external · costly`, `✉ leaves camy`), and
+how long ago it arrived. Repeats of the same question collapse into one
+row with a count and a date range, and the list ends in the verbs that
+apply to its rows.
 With nothing pending it prints "no pending approvals — the leash is slack"
 and exits 0.
 
@@ -140,10 +145,14 @@ happened.
 ## The approval card
 
 When a checkpoint pauses a chat you're watching live — in a terminal or the
-full-screen app — it draws as a boxed card in the same amber the CLI uses
-for the whole approvals surface. The heading names what's being asked:
-`APPROVAL`, `QUESTION`, `CHOICE`, or `FORM`, each with the tool or action
-name appended when there is one.
+full-screen app — it draws as a rounded card in the amber the CLI reserves for the leash.
+The header row names what's being asked — `APPROVAL`, `QUESTION`, `CHOICE`,
+or `FORM`, with the tool or action in plain words — and carries the
+checkpoint's id at the right; a divider, the body, then labelled rows:
+where the bite lands (`lane`), how bad (`risk`), where it came from
+(`from`), and when it was asked. The question is never inside the frame:
+it is its own line beneath the card, with the keys printed under it, and
+`[y/N/o(pen web)]` is unchanged.
 
 The body shows the summary, capped at a few lines, with a
 "… +N more — o opens the full card" marker when it runs long. For a local

@@ -16,8 +16,11 @@ release tarball.
 | `SHA256SUMS-<version>.sig` | Detached cosign signature for that manifest. | Both |
 | `SHA256SUMS-<version>.pem` | The certificate that signature was made with. | Both |
 | `SHA256SUMS-<version>.minisig` | minisign signature for that manifest. | Both |
-| `camy_<version>.intoto.jsonl` | SLSA build provenance covering the four tarballs, from 1.0.1 on. | Both |
+| `camy_<version>.intoto.jsonl` | SLSA build provenance covering the four tarballs, from 1.0.1 on, and the Camy.app zip, from 1.0.3 on. | Both |
 | `Camy_<version>_darwin.zip` | Camy.app, the notarized Mac application, with a `.sha256` sidecar, from 1.0.2 on. | Both |
+| `Camy_<version>_darwin.zip.sig` | Detached cosign signature for the zip, from 1.0.3 on. | Both |
+| `Camy_<version>_darwin.zip.pem` | The certificate that signature was made with. | Both |
+| `Camy_<version>_darwin.zip.minisig` | minisign signature for the zip, from 1.0.3 on. | Both |
 | `SHA256SUMS` | A merged, cumulative checksum index spanning every published version. This is what the installer and `camy update` check downloads against. | Channel only |
 | `VERSION` | The current version as a plain-text string — what the installer and `camy update` read to find the latest release. | Channel only |
 
@@ -154,7 +157,7 @@ version-scoped file.
 
 From 1.0.1 on, every release also publishes `camy_<version>.intoto.jsonl`,
 a [SLSA](https://slsa.dev/) provenance statement over the four
-tarballs. Where the cosign signature proves who signed the checksum
+tarballs and, from 1.0.3 on, the Camy.app zip. Where the cosign signature proves who signed the checksum
 manifest, the provenance proves how the tarballs came to exist: which
 source repository and tag they were built from, and by which builder. It is
 generated and signed not by the CLI's own release workflow but by the SLSA
@@ -257,20 +260,48 @@ for every command-line binary, notarized or not.)
 From 1.0.2, each release also publishes `Camy_<version>_darwin.zip`, the
 Mac application that [runs Camy as a device](device.md). It holds the same
 `camy` binary as the tarballs, as a universal build, inside a bundle that is
-code-signed with Apple Developer ID, notarized, and stapled. Its integrity
-is the `.sha256` sidecar beside it plus Apple's notarization; it is not
-listed in the signed manifest. To check a downloaded copy:
+code-signed with Apple Developer ID, notarized, and stapled.
+
+From 1.0.3 on, the zip is covered by the same three proofs as the tarballs,
+made by the same identities: a cosign signature (`.sig` and `.pem` beside
+it) whose certificate names the release workflow at the release tag, a
+minisign signature (`.minisig`) with the release key, and a subject entry
+in the release's SLSA provenance. The zip is not listed in
+`SHA256SUMS-<version>`; its signatures are its own. To check a downloaded
+copy:
 
 ```bash
-shasum -a 256 -c Camy_1.0.2_darwin.zip.sha256
-unzip -q Camy_1.0.2_darwin.zip
+cosign verify-blob \
+  --certificate Camy_1.0.3_darwin.zip.pem \
+  --signature Camy_1.0.3_darwin.zip.sig \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity https://github.com/CamyAI/camy-cli/.github/workflows/release.yml@refs/tags/v1.0.3 \
+  Camy_1.0.3_darwin.zip
+minisign -Vm Camy_1.0.3_darwin.zip \
+  -P RWT7bpmBcMfiVQvo6BbIeVDh7f9B8WbapvOEBzs7TxhSkLsjlySfxXG6
+slsa-verifier verify-artifact Camy_1.0.3_darwin.zip \
+  --provenance-path camy_1.0.3.intoto.jsonl \
+  --source-uri github.com/CamyAI/camy-cli \
+  --source-tag v1.0.3
+```
+
+Expect `Verified OK` from cosign, `Signature and comment signature verified`
+from minisign, and `PASSED: SLSA verification passed` from slsa-verifier,
+each with the meaning described in the sections above. Then check the
+bundle the way macOS does:
+
+```bash
+shasum -a 256 -c Camy_1.0.3_darwin.zip.sha256
+unzip -q Camy_1.0.3_darwin.zip
 spctl -a -t exec -vv Camy.app
 xcrun stapler validate Camy.app
 ```
 
 Expect `accepted` with `source=Notarized Developer ID` from `spctl`, which
 does assess application bundles, and `The validate action worked` from
-`stapler`.
+`stapler`. The 1.0.2 zip predates the signatures and the provenance entry:
+for that one release, the `.sha256` sidecar and Apple's notarization are
+the checks available.
 
 ## Reproducible builds
 

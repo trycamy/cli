@@ -9,6 +9,81 @@ change to either that is not backward compatible bumps the major version.
 Each GitHub Release on this repository carries the same notes as its section
 below, plus the signed checksums for that version.
 
+## 1.0.3 — 2026-09-15
+
+The terminal has been redesigned. Every screen follows the same layout and
+ends with what to do next, approvals are a card with the question on its
+own line, the full-screen app shows what is happening right above your
+input, and help leads with examples.
+
+**New**
+
+- Adds `camy plan`: your plan, today's turns and when they reset, and your
+  balance for the month, with where to change it.
+- Adds a help overlay to the full-screen app (`?` or F1), and runs any
+  read-only command inside it as `/command`. See
+  [The full-screen app](docs/terminal.md#the-full-screen-app-and---inline).
+- Adds `/plan`, `/queue` and `/usage` to the app: the agent's checklist for
+  the current turn, the messages waiting behind it (Enter sends one next,
+  `d` drops it), and your plan and credits. Credits no longer sit on the
+  status row.
+- Adds multi-select to the app's `/approvals` picker: press space to mark
+  rows, then `a` to approve or `d` to deny them together.
+- Adds `camy tasks reopen`, the undo for `camy tasks done`.
+- Adds `--ground dark|light` to force the colour palette, `--no-truncate`
+  to keep list cells whole, and `--raw` to get a listing's unmodified
+  response under `--json`.
+
+**Improvements**
+
+- Ids are short and typed, such as `ap_789a` or `jb_aab2`, and every
+  command accepts one alongside a prefix or a full id. `--json` keeps full
+  ids, and `--ids=hex` prints the old eight-character form for one more
+  release.
+- Commands that take an id now take several: `approvals show`, `approve`
+  and `deny`; `inbox show`, `undo`, `mark-read`, `archive` and `restore`;
+  `jobs show` and `cancel`; `tasks done`, `reopen` and `rm`; `schedule
+  show` and `delete`; `feed show` and `dismiss`; `keys revoke`. One
+  confirmation covers the set, and `--json` returns one result per id.
+- Makes `--json` consistent: a listing is always an array, an empty listing
+  is `[]`, a single item is an object, and a `--all` sweep that partly
+  fails keeps what it fetched in a `partial` envelope. `camy connectors`
+  and `camy integrations` no longer wrap their listings. See
+  [Scripting](docs/scripting.md#listings-single-things-and-ids).
+- `camy approvals` groups what is waiting by the kind of decision, collapses
+  repeats, and shows only the actions that apply. The card names the kind,
+  id, lane, risk, origin and age, with the question and its keys beneath.
+  `[y/N/o(pen web)]` is unchanged. See [Approvals](docs/approvals.md).
+- `camy status` shows the command behind each row, marks a row it could
+  not fetch with `?` instead of hiding it, and marks browser destinations
+  with `↗`.
+- `camy jobs show` and `camy feed show` put a job's blocker first, with the
+  command that clears it. `camy chats show` renders a transcript the way
+  the app does.
+- The full-screen app keeps a fixed header, shows what the turn is doing
+  right above your input, lists its keys along the bottom with a
+  connection indicator, and keeps the transcript plain text you can copy.
+- In a chat, each tool call closes on its own line with what it returned
+  and how long it took, and a one-shot turn ends with a short trailer
+  naming the tier, the time and the chat.
+- Errors are two lines, what went wrong and how to fix it. When camy can
+  diagnose the cause (network, sign-in, credits, a sleeping workspace), the
+  fix is shown as a command.
+- Shows progress on any read that takes longer than 150 ms, with a way to
+  cancel.
+- Help leads with examples on every command, followed by its verbs, flags
+  and what to run next. The root page lists commands in the order you are
+  likely to need them.
+- Shell completion completes ids from the same lists the commands print,
+  instead of local filenames.
+- Everything fits 60 columns and works under `NO_COLOR` and with
+  `--accessible`, which uses words a screen reader can say instead of
+  symbols, frames and spinners. A light terminal background is detected
+  and gets its own palette. See
+  [Terminal output and accessibility](docs/terminal.md).
+- Fixes the full-screen app freezing when a turn got stuck. The menu works
+  while a turn runs, and `esc` always returns you to the composer.
+
 ## 1.0.2 — 2026-09-13
 
 Camy now runs on your Mac as a resident agent, connectors have a home in

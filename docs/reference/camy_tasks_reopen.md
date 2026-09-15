@@ -1,21 +1,22 @@
-## camy device forget
+## camy tasks reopen
 
-Forget this Mac's link locally — its key, record and trail
-
-### Synopsis
-
-Erases this computer's own half of the link: the device key, the stored
-credential, the record and the local trail. It does not revoke anything —
-do that in Settings → Your computers (or camy device status to check).
+Put a done task back on the list
 
 ```
-camy device forget [flags]
+camy tasks reopen ID... [flags]
+```
+
+### Examples
+
+```
+  camy tasks reopen tk_2b28
+  camy tasks reopen tk_2b28 tk_9f10  # a line each
 ```
 
 ### Options
 
 ```
-  -h, --help   help for forget
+  -h, --help   help for reopen
 ```
 
 ### Options inherited from parent commands
@@ -47,5 +48,5 @@ camy device forget [flags]
 
 ### SEE ALSO
 
-* [camy device](camy_device.md)	 - Link this computer to your Camy account and run as a resident agent
+* [camy tasks](camy_tasks.md)	 - quick to-dos, tracked across surfaces
 

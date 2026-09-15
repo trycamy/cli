@@ -31,6 +31,8 @@ the reply. If a tool call needs your approval before it can run, camy shows
 an approval card; see [Approvals](approvals.md) for how those work and what
 happens when nothing is there to answer them.
 
+Each trace closes on its own line with what came back — `✓ 4 emails · 0.6s`, `✗ exit 1 · 0.4s`, `! awaiting approval` — so a turn reads as a ledger of what ran and what it found.
+
 **stdout is the reply, stderr is everything else.** The reply text (or, in
 JSON mode, the NDJSON event stream — see
 [below](#machine-output---json-and-ndjson)) is the only thing camy writes to
@@ -84,7 +86,7 @@ The full, command-independent table lives in [Exit codes](exit-codes.md).
 
 In a human terminal, a completed turn prints a one-line footer: `camy chats
 show <id>` if the turn approved anything, so you know where to look to undo
-it, or a reminder that `camy chat -c` continues the conversation otherwise.
+it, or a quiet trailer — the tier that actually ran, how long the turn took, the chat id — and the commands that continue it.
 A `--temp` turn prints neither line — there is nothing to show or continue.
 
 Full flag reference: [camy chat](reference/camy_chat.md).
@@ -256,6 +258,18 @@ Replies render through the same markdown pipeline as `camy chats show` —
 headings, code blocks, and emphasis draw as formatted text, not raw
 markdown source.
 
+### The screen
+
+A masthead is pinned at the top: the mode, the chat, and how many things
+are waiting on you, with the local scope and the profile on the right. The
+transcript scrolls between. At the bottom, directly above your input, sits
+the status row — what the turn is doing and for how long while it runs, the
+waiting card while one is up, a picker's count while one is open — then the
+hairline, the composer, a one-line hint, and a key bar drawn from the same
+table the keys come from, with a dot at its end that says whether the
+connection is live. `?` (or F1) on an empty composer opens a help overlay
+of those keys and every slash command.
+
 ### Composing
 
 - Enter submits — or, while a turn is still generating, queues the message
@@ -271,7 +285,7 @@ markdown source.
 
 | Command | Does |
 |---|---|
-| `/approvals` | Opens a picker over pending checkpoints — the leash, inline. |
+| `/approvals` | Opens a picker over pending checkpoints — the leash, inline. Space marks rows; `a` approves and `d` denies every marked row at once. |
 | `/inbox` | Shows the inbox list, read-only, inline. |
 | `/status` | The right-now status pane. |
 | `/compact` | Summarizes older context on demand, and says so when there's nothing to compact. |
@@ -280,11 +294,16 @@ markdown source.
 | `/vm` | Your cloud workspace. |
 | `/new` | Starts a fresh chat; the old one stays in `/chats`. |
 | `/chats` | Opens a picker over every conversation; `/chat ID` switches straight to one. |
-| `/help` | Keys and commands. |
+| `/plan` | The agent's checklist for this turn, as a pane; the status row counts it (`3 of 5 done · /plan`). |
+| `/queue` | What is waiting to send when this turn ends: Enter steers a message in next, `d` drops it. |
+| `/usage` | Your plan and credits — the same pane as `camy plan`. Credits never appear on the status row. |
+| `/help` | Keys and commands (also `?` or F1). |
+| `/<verb>` | Any read-only camy verb — `/feed`, `/tasks`, `/plan`, `/doctor`, `/schedule` … — runs through the same renderer into the transcript. |
 | `/quit` | Leaves — anything scheduled keeps running. |
 
-Esc interrupts a turn that's generating; two Ctrl-C's in quick succession
-leave the app.
+Esc asks the server to stop the turn that's generating and waits for the
+confirmation — Esc again hands the composer back at once. The menu keeps
+working while a turn runs. Two Ctrl-C's in quick succession leave the app.
 
 ### `--inline` and `--accessible`
 
@@ -292,7 +311,9 @@ Two flags change how the app draws without changing what it can do:
 
 - `--inline` (or `CAMY_INLINE=1`) keeps the same app and the same slash
   commands, but renders into your terminal's native scrollback instead of
-  taking over the screen with an alternate-screen, animated layout.
+  taking over the screen with an alternate-screen, animated layout. It has
+  no masthead: one line under the composer says where you are — the chat,
+  the folder camy may touch, what is waiting, and `/help`.
 - `--accessible` (or `CAMY_ACCESSIBLE=1`, or a `TERM=dumb` terminal) skips
   the full-screen app entirely and drops you into a plain line-by-line
   REPL instead: no redraws, no spinners, no boxes.

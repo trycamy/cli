@@ -1,21 +1,22 @@
-## camy device forget
+## camy plan
 
-Forget this Mac's link locally — its key, record and trail
-
-### Synopsis
-
-Erases this computer's own half of the link: the device key, the stored
-credential, the record and the local trail. It does not revoke anything —
-do that in Settings → Your computers (or camy device status to check).
+Your plan and credits — what's left today, this month, and where to change it
 
 ```
-camy device forget [flags]
+camy plan [flags]
+```
+
+### Examples
+
+```
+  camy plan
+  camy plan --json
 ```
 
 ### Options
 
 ```
-  -h, --help   help for forget
+  -h, --help   help for plan
 ```
 
 ### Options inherited from parent commands
@@ -47,5 +48,5 @@ camy device forget [flags]
 
 ### SEE ALSO
 
-* [camy device](camy_device.md)	 - Link this computer to your Camy account and run as a resident agent
+* [camy](camy.md)	 - Camy in your terminal — the same agent, memory, and cloud computer you run at camy.ai
 

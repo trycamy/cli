@@ -1,21 +1,23 @@
-## camy device forget
+## camy integrations connect
 
-Forget this Mac's link locally — its key, record and trail
-
-### Synopsis
-
-Erases this computer's own half of the link: the device key, the stored
-credential, the record and the local trail. It does not revoke anything —
-do that in Settings → Your computers (or camy device status to check).
+Connect an account — a link opens, you sign in there, camy waits
 
 ```
-camy device forget [flags]
+camy integrations connect PROVIDER [flags]
+```
+
+### Examples
+
+```
+  camy integrations connect google
+  camy integrations connect github --no-browser   (prints the link only)
 ```
 
 ### Options
 
 ```
-  -h, --help   help for forget
+  -h, --help         help for connect
+      --no-browser   print the link instead of opening it
 ```
 
 ### Options inherited from parent commands
@@ -47,5 +49,5 @@ camy device forget [flags]
 
 ### SEE ALSO
 
-* [camy device](camy_device.md)	 - Link this computer to your Camy account and run as a resident agent
+* [camy integrations](camy_integrations.md)	 - Connected accounts, with health
 

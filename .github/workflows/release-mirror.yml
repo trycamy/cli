@@ -38,6 +38,9 @@ env:
   SIGNER: '^https://github\.com/CamyAI/camy-cli/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'
   # The source repository the SLSA provenance must name, for slsa-verifier.
   SOURCE: github.com/CamyAI/camy-cli
+  # The release minisign public key, as published in docs/verifying-releases.md
+  # and pinned by scripts/install.sh.
+  MINISIGN_PUB: RWT7bpmBcMfiVQvo6BbIeVDh7f9B8WbapvOEBzs7TxhSkLsjlySfxXG6
 
 jobs:
   mirror:
@@ -81,6 +84,14 @@ jobs:
       - name: Install cosign
         if: steps.v.outputs.skip == 'false'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Pinned and checked against the Go module checksum database; verifies
+      # the minisign signature on the Camy.app zip (1.0.3 on).
+      - name: Install minisign
+        run: |
+          set -euo pipefail
+          go install aead.dev/minisign/cmd/minisign@v0.3.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Install slsa-verifier
         if: steps.v.outputs.skip == 'false'
@@ -127,12 +138,30 @@ jobs:
             done
           fi
           # The notarized Camy.app bundle, published from 1.0.2 on beside the
-          # tarballs. Its integrity is the sha256 sidecar plus Apple's own
-          # notarization; it is not in the signed manifest.
-          if get "Camy_${V}_darwin.zip.sha256"; then
-            get "Camy_${V}_darwin.zip"
-            want=$(awk '{print $1}' "Camy_${V}_darwin.zip.sha256"); got=$(sha256sum "Camy_${V}_darwin.zip" | cut -d' ' -f1)
-            [ "$want" = "$got" ] || { echo "::error::Camy_${V}_darwin.zip does not match its sha256 sidecar"; exit 1; }
+          # tarballs. 1.0.2 shipped it with a sha256 sidecar and Apple's
+          # notarization only; from 1.0.3 the zip carries its own cosign and
+          # minisign signatures and is a subject of the same SLSA provenance
+          # as the tarballs, and every one of the three must verify.
+          Z="Camy_${V}_darwin.zip"
+          if get "$Z.sha256"; then
+            get "$Z"
+            want=$(awk '{print $1}' "$Z.sha256"); got=$(sha256sum "$Z" | cut -d' ' -f1)
+            [ "$want" = "$got" ] || { echo "::error::$Z does not match its sha256 sidecar"; exit 1; }
+            if [ "$V" = "1.0.2" ]; then
+              echo "::notice::$V predates the bundle's signatures and provenance"
+            else
+              get "$Z.sig"; get "$Z.pem"
+              get "$Z.minisig" || { echo "::error::no minisign signature published for $Z"; exit 1; }
+              cosign verify-blob \
+                --certificate "$Z.pem" --signature "$Z.sig" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                --certificate-identity-regexp "$SIGNER" \
+                "$Z"
+              minisign -Vm "$Z" -x "$Z.minisig" -P "$MINISIGN_PUB"
+              slsa-verifier verify-artifact "$Z" \
+                --provenance-path "camy_$V.intoto.jsonl" \
+                --source-uri "$SOURCE" --source-tag "v$V"
+            fi
           else
             echo "::notice::no Camy.app bundle published for $V"
           fi
@@ -156,7 +185,7 @@ jobs:
           awk -v v="$V" '/^## / { if (on) exit; on = ($2 == v); next } on { print }' CHANGELOG.md \
             | sed -e '1{/^$/d;}' > notes.md
           [ -s notes.md ] || { echo "::error::empty CHANGELOG.md section for $V"; exit 1; }
-          printf '\n---\n\nEvery asset was downloaded from the release channel and verified before upload: checksums against `SHA256SUMS-%s`, that manifest against its cosign signature, and, where published, each tarball against the SLSA provenance `camy_%s.intoto.jsonl`. See docs/verifying-releases.md.\n' "$V" "$V" >> notes.md
+          printf '\n---\n\nEvery asset was downloaded from the release channel and verified before upload: checksums against `SHA256SUMS-%s`, that manifest against its cosign signature, and, where published, each tarball and the Camy.app zip against the SLSA provenance `camy_%s.intoto.jsonl`. See docs/verifying-releases.md.\n' "$V" "$V" >> notes.md
           cat notes.md
 
       - name: Create the GitHub Release

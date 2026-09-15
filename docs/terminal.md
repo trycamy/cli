@@ -99,16 +99,50 @@ Accessible mode also turns off:
 
 Glyphs degrade too, to the ASCII fallbacks below.
 
-## Glyphs and Unicode
+## Marks, glyphs and Unicode
 
-`✓`, `●`, and `…` become `OK`, `*`, and `...` whenever accessible mode is
-on, or when your locale doesn't name UTF-8.
+Every state `camy` shows is carried by a mark — one shape per meaning — so
+the meaning survives without colour. Colour rides on top; the shape is the
+contract:
+
+| Mark | Meaning | ASCII | `--accessible` |
+| --- | --- | --- | --- |
+| `!` | needs you — the only warning | `!` | `NEEDS` |
+| `●` | live, running right now | `*` | `LIVE` |
+| `○` | at rest, nothing here, asleep | `o` | `REST` |
+| `✓` | done, handled, a check that passed | `+` | `OK` |
+| `✗` | broken, denied, failed | `x` | `FAIL` |
+| `?` | the fetch failed — nothing is claimed | `?` | `UNK` |
+| `·` | a neutral note | `-` | `NOTE` |
+| `↗` | a browser destination, not a command | `>` | `WEB` |
+| `✦` | Camy speaking | `*` | `CAMY` |
+| `⋮` | a tool call in flight | `:` | `TOOL` |
+| `⌂` `☁` `✉` `$` | where an approval's bite lands: this machine, your workspace, leaves camy, costs money | `@` `~` `>` `$` | `HERE` `CLOUD` `MAIL` `MONEY` |
+
+The ASCII column is used whenever your locale doesn't name UTF-8; the word
+column whenever accessible mode is on — six columns wide, so lists still
+align and a screen reader says "needs", not "exclamation". The ellipsis
+`…` becomes `...` on the same rule.
 
 The locale comes from `LC_ALL`, then `LC_CTYPE`, then `LANG` — the first
 one set wins. A value that mentions neither `UTF-8` nor `UTF8` switches
-spinners, box-drawing, and the ellipsis to plain ASCII. With none of the
-three set at all, `camy` assumes a modern UTF-8 terminal and uses the
+spinners, box-drawing, marks, and the ellipsis to plain ASCII. With none of
+the three set at all, `camy` assumes a modern UTF-8 terminal and uses the
 Unicode glyphs.
+
+## Ground: dark or light
+
+```bash
+camy status --ground light
+CAMY_GROUND=light camy status
+```
+
+The palette has two grounds. `camy` picks one in order: `--ground`, then
+`CAMY_GROUND`, then the `COLORFGBG` variable some terminals export, then
+— on a real terminal, outside `tmux`, `screen` and CI — a 120 ms query of
+the terminal's own background colour (OSC 11), and finally dark. A light
+terminal gets colours measured for a white ground; the accent stays the
+same. `camy doctor`'s `render` row names the ground it chose.
 
 ## The full-screen app and `--inline`
 
@@ -218,11 +252,14 @@ Not every surface uses the full width:
 
 | Surface | Width |
 | --- | --- |
-| Streamed agent prose | terminal width minus 2, capped at 88, never below 20 |
-| Approval cards (interior) | terminal width minus 6, capped at 64, never below 24 |
+| Lists, panes, cards, the status page | the content width: the terminal minus 4, between 36 and 120 |
+| Agent prose, email bodies, `camy docs` text | the prose measure: 72, or the content width when that is narrower |
+| Right-aligned rails (the command a row points at) | drop under their row below 64 columns |
 
-Widening `COLUMNS` past those caps changes tables, list rows, and `camy
-docs` body text — not streamed agent prose or cards.
+Below 60 columns every list stacks: the first and last cells on one line,
+the rest beneath. Nothing is squeezed — the least important column is
+dropped first, and a measured value is never truncated to make room.
+Widening `COLUMNS` past the caps changes nothing but the margin.
 
 ## What `camy doctor` reports
 
@@ -233,11 +270,16 @@ either hyperlinks or inline graphics aren't available.
 ```text
 $ camy doctor
   ...
-  ! terminal   hyperlinks no · graphics no — iTerm2/kitty unlock inline image previews
+  · render      truecolor · dark ground (osc11) · 100 columns · hyperlinks yes
+  ! terminal    no inline graphics — iTerm2 or kitty unlock camy computer peek
 ```
 
-The fix text names the graphics-capable terminals; in this CLI the graphics
-it unlocks are the inline image previews described above.
+The `render` row answers "why is my output plain" in one line — the colour
+rung, the ground and how it was decided (`flag`, `env`, `COLORFGBG`,
+`osc11`, or `default`), the width, and whether hyperlinks are on; it ends
+in `accessible` when that mode is on. The `terminal` row's fix names the graphics-capable terminals; in
+this CLI the graphics they unlock are the inline image previews described
+above.
 
 The `graphics` half of that line is `yes` only when `TERM_PROGRAM` is
 `iTerm.app` or `TERM` contains `kitty` — narrower than the full
@@ -256,6 +298,8 @@ you expect is missing, see [Troubleshooting](troubleshooting.md).
 | `COLORTERM` | `truecolor`/`24bit` selects the truecolor rung |
 | `TERM` | `dumb` forces color off and accessible mode; `*256color*` selects the 256-color rung |
 | `CAMY_ACCESSIBLE` | `1` forces accessible (linear) output |
+| `CAMY_GROUND` | `light` or `dark` picks the palette's ground; `--ground` wins over it |
+| `COLORFGBG` | read as a ground hint when neither `--ground` nor `CAMY_GROUND` is set |
 | `CAMY_INLINE` | `1` keeps the classic scrollback app instead of full-screen |
 | `CAMY_PAGER` | pager command, highest-precedence rung |
 | `PAGER` | pager command, fallback rung |
