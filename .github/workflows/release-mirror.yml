@@ -11,8 +11,10 @@ name: Mirror release
 # "unreleased" is skipped until the notes and the date are written.
 
 on:
-  schedule:
-    - cron: "*/30 * * * *"
+  # Scheduled polling removed 2026-09-17: the every-30-minutes cron was a no-op
+  # on ~99% of runs (the channel VERSION had not changed). Mirror a release
+  # on demand with workflow_dispatch, or wire a repository_dispatch from the
+  # private release pipeline so a real publish triggers exactly one run.
   workflow_dispatch:
     inputs:
       version:
