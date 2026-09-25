@@ -18,25 +18,29 @@ camy feed                # cards waiting for a word
 camy inbox
 ```
 
-Lists mail across your connected accounts, one line per message: a short
-id, the sender, the subject, and a triage verdict. With nothing to show it
-prints `inbox zero — nothing here` and exits 0.
+Lists mail across your connected accounts, one line per message: a mark
+for the triage verdict, a short id, the sender, the subject, and how long
+ago it arrived. With nothing to show it prints `inbox zero — nothing here`
+and exits 0; a filtered view with nothing in it says
+`nothing here — this view is filtered` instead.
 
 The verdict is computed locally from whether the message is read and its
 classification — the list itself carries no separate verdict field:
 
-- **needs you** — unread, and not in a bulk class
-- **handled** — read, and not in a bulk class
-- **filed** — classified as newsletter, marketing, automated mail, or
+- `!` **needs you** — unread, and not in a bulk class
+- `✓` **handled** — read, and not in a bulk class
+- `○` **filed** — classified as newsletter, marketing, automated mail, or
   similar bulk mail, regardless of read state
 
-Above the list, human mode prints a header with unread and needs-you
-counts. The header is stderr chrome: `camy inbox | wc -l` never counts it,
-and `-q` suppresses it.
+Above the list, a count line gives your unread and needs-you totals
+(`3,342 unread · 7 need you`), with `camy inbox --needs-you` at its right
+unless `--needs-you` or `--tab` already narrows the list. Below the rows, a line of commands suggests where to
+go next. Both are part of stdout, alongside the rows, so a script that
+wants only the messages should use `--json`.
 
 Whenever the number of rows shown differs from your total unread count, a
 footer line states both figures and points at a larger `-L` or `--all`.
-That line is part of stdout, alongside the rows.
+That line is part of stdout too.
 
 ### Flags
 
@@ -46,7 +50,7 @@ That line is part of stdout, alongside the rows.
 | `--needs-you` | only what's waiting on you |
 | `--tab string` | one of `needs-you`, `unread`, `people`, `newsletters`, `receipts`, `calendar`, `all` |
 | `--cursor string` | resume from a `next_cursor` |
-| `-L, --limit int` | page size |
+| `-L, --limit int` | page size, 1 to 200 (default: the server's 60) |
 | `--all` | auto-paginate to the end, following `next_cursor` |
 
 ```bash
@@ -55,23 +59,33 @@ camy inbox --tab newsletters -L 50
 camy inbox --all
 ```
 
-An unrecognized `--tab` value is a usage error (exit 2) before any request
-goes out. See [camy inbox](reference/camy_inbox.md) for the complete flag
-reference.
+An unrecognized `--tab` value, or a `-L` above 200 or below zero, is a
+usage error (exit 2) before any request goes out. See
+[camy inbox](reference/camy_inbox.md) for the complete flag reference.
 
 ### Reading a message
 
 ```bash
 camy inbox show em_7f31
+camy inbox show em_7f31 em_2a0c
 ```
 
-Prints one message in full: subject, sender, date, an attachment count if
-there are any, the AI summary and why-it-matters line when triage is
-available, then the body. Attachments open on the web, not from the CLI.
+Prints one message in full: the short id and subject, with the triage
+verdict at the right; then the sender, every recipient on `to`, `cc`, and
+`bcc` lines, the date received, and an attachment count if there are any;
+then the commands you can run on it (`reply`, `archive`, `mark-read`); then
+the AI summary and why-it-matters line when triage is available, and the
+body last. On a narrow terminal a long subject wraps under itself and the
+verdict takes its own line, so the header never runs past the edge.
+Attachments open on the web, not from the CLI. Name several ids to get one
+message after another.
 
-If the message carries a List-Unsubscribe method, a hint line points at
-`camy inbox unsubscribe`. Pass `-w`/`--web` to open the message at
-`https://camy.ai/p/inbox` instead of printing it in the terminal.
+If the message carries a List-Unsubscribe method, the commands line offers
+`unsubscribe` too. Pass `-w`/`--web` to open the message itself in the web
+inbox at `https://camy.ai/p/inbox` instead of printing it in the terminal.
+`-w` takes one id at a time. A short id or prefix that matches no email in
+your inbox is refused (exit 2) rather than opening the page on nothing. A
+full id opens the page without being checked.
 
 An id that resolves to nothing is a runtime error (exit 1), not an empty
 success — a missing message never looks like an empty one.
@@ -94,10 +108,18 @@ camy inbox archive em_7f31
 camy inbox restore em_7f31
 ```
 
-Each takes one or more ids and applies the same action to each in turn.
-The batch stops at the first id that fails — ids already processed before
-that point have already taken effect. There is no aggregate `--json`
-summary distinguishing which ids succeeded.
+Each takes one or more ids and applies the same action to each. Every id
+is resolved first, then every one that resolved is acted on: an id that
+fails doesn't stop the rest. Each success prints its own line
+(`✓ archived — em_7f31`). If any failed, the command ends with a summary
+such as `1 of 3 didn't work`, naming each id that failed and why, and
+exits non-zero; what went through stays done, and nothing is rolled back.
+
+The server can accept a request and still change nothing, for instance
+for an id that isn't one of your emails. That counts as a failure, never a
+✓: `archive didn't apply — the server changed nothing for that email`
+(exit 1). The same goes for the mark `camy inbox read` makes after showing
+the message.
 
 See [camy inbox mark-read](reference/camy_inbox_mark-read.md),
 [camy inbox archive](reference/camy_inbox_archive.md), and
@@ -110,9 +132,12 @@ camy inbox unsubscribe em_7f31
 ```
 
 Acts on the message's List-Unsubscribe header. A one-click or `mailto`
-method runs server-side and confirms directly. A link method never fetches
-itself — a `GET` isn't an unsubscribe — so the CLI prints the link for you
-to open instead. A message with no unsubscribe method available says so.
+method runs server-side and confirms directly
+(`✓ unsubscribed — via one-click`). A link method never fetches itself — a
+`GET` isn't an unsubscribe — so the CLI prints the link for you to open
+instead. A message with no unsubscribe method fails with
+`this email carries no unsubscribe method` (exit 1): nothing was done, and
+`camy inbox archive` files it instead.
 
 See [camy inbox unsubscribe](reference/camy_inbox_unsubscribe.md).
 
@@ -151,11 +176,18 @@ camy inbox reply em_7f31 --body "sounds good" --send --at 2h
 
 ```bash
 camy inbox undo ob_31f2
+camy inbox undo ob_31f2 ob_9c4d
 ```
 
-Pulls a queued reply back before it leaves, inside the undo window. The
-outbox id is used exactly as given — it is not resolved from a short
-prefix the way other ids in this area are.
+Pulls one or more queued replies back before they leave, inside the undo
+window. It takes the `ob_` short id `camy inbox outbox` prints, a prefix of
+at least 4 characters, or the full id, and resolves it against what is
+still queued: an id that matches nothing queued is refused
+(`nothing queued matches ob_31f2`, exit 2). That includes an `ob_` short
+id for a reply that already left or was already cancelled. It reports
+`✓ cancelled — ob_31f2 never left` only when the send was actually pulled
+back. `not cancelled` (exit 1) happens only for a full outbox id, or when
+the send goes out between the lookup and the cancel.
 
 ```bash
 camy inbox outbox
@@ -231,19 +263,22 @@ See [camy inbox snooze](reference/camy_inbox_snooze.md) and
 
 ### Short ids
 
-Every id in this section accepts the typed short id `camy inbox` prints
-(`em_7f31`), a bare prefix of at least 4 characters of the full id, or the
-full id.
+Every email id in this section accepts the typed short id `camy inbox`
+prints (`em_7f31`), a bare prefix of at least 4 characters of the full id,
+or the full id. A short id is looked up in your whole inbox, then your
+needs-you view, then your unread mail (the newest 200 of each), so a
+message that sits far down a large inbox still resolves.
 
 - A prefix under 4 characters is refused outright.
-- A prefix matching nothing is passed through to the API, which reports it
-  not found.
+- A prefix matching nothing is passed through to the API, and the command
+  fails there rather than guessing.
 - A prefix matching more than one message is a usage error asking for a
   longer one. Resolution never guesses between candidates.
 
-Three things are taken exactly as typed instead: the outbox id used by
-`inbox undo`, `inbox send`'s recipients, and `inbox show -w`, which puts
-the id you typed straight into the URL without resolving it.
+Two verbs refuse a prefix that matches nothing instead of passing it on:
+`inbox show -w`, because the web page needs the full id, and `inbox undo`,
+which resolves outbox ids against `camy inbox outbox`. `inbox send`'s
+recipients are addresses, taken exactly as typed.
 
 ## The sweep dial
 
@@ -254,7 +289,10 @@ without asking each time.
 camy sweep
 ```
 
-Prints the current mode and whether it's paused.
+Prints the dial: all four modes, each with a line on what it does, the
+current one marked `← now` (`← now, paused` when it's paused), then the
+commands to review what it filed, restore it, and step the dial up or
+down.
 
 ### Modes
 
@@ -268,10 +306,16 @@ camy sweep set auto --dry-run
 `camy sweep set` refuses anything else as a usage error before any request
 goes out.
 
-The CLI does not define the four modes — it checks the name you typed and
-hands it to your account, which applies it server-side, so `camy sweep`
-reads back whatever your account is set to. Whatever a sweep files stays
-listed and reversible through `camy sweep review` and `camy sweep restore`.
+The CLI does not carry out the four modes — `sweep set` checks the name
+you typed and hands it to your account, which applies it server-side, so
+`camy sweep` reads back whatever your account is set to. Whatever a sweep
+files stays listed and reversible through `camy sweep review` and
+`camy sweep restore`.
+
+On success `sweep set` prints
+`✓ sweep dial → suggest — you can always camy sweep review`. If the server
+doesn't save the change, it fails with the reason (exit 1) instead of
+confirming a dial that didn't move.
 
 `--dry-run` shows the current mode against the one you're about to set,
 without writing anything.
@@ -286,24 +330,28 @@ camy sweep review
 ```
 
 Lists every batch the sweep has filed, restorable: a batch id, how many
-messages, and when. With nothing filed yet, it says so rather than
-printing an empty table.
+messages, and when. Under each batch comes one line per message it filed:
+the item id `restore --items` takes, then the sender and subject, with
+`(back in the inbox)` after one that has already been restored. With
+nothing filed yet, it says so rather than printing an empty table.
 
 `sweep review` shortens the batch id it prints to its first 8 characters,
-and `sweep restore` takes the id exactly as given — it does not expand a
-prefix the way the inbox ids do. If the shortened id is rejected, take the
-full one from `camy sweep review --json`.
+and `sweep restore` resolves that short id, or any prefix of at least 4
+characters, against the same list. A prefix that matches no batch is a
+usage error (exit 2) before anything is restored.
 
 ```bash
-camy sweep restore batch_9f2
-camy sweep restore batch_9f2 --items em_1,em_2
+camy sweep restore 9f2c41ab
+camy sweep restore 9f2c41ab --items gmail_18f2a9c0d1,gmail_18f2a9c0d2
 ```
 
 Brings a filed batch back to the inbox. `--items` restores only the listed
-message ids from that batch instead of the whole batch — the list is
-split on commas exactly as typed, so write `em_1,em_2` with no spaces.
-Either way the CLI reports the restore as
-`back in the inbox, sender remembered`.
+items from that batch instead of the whole batch — the list is split on
+commas exactly as typed, so write the ids with no spaces between them.
+The CLI reports how many came back
+(`✓ restored 26 emails — back in the inbox, sender remembered`). If
+nothing came back, because no such batch exists or everything in it is
+already in the inbox, `restore` says `nothing restored` and exits 1.
 
 See [camy sweep review](reference/camy_sweep_review.md) and
 [camy sweep restore](reference/camy_sweep_restore.md).
@@ -321,13 +369,18 @@ camy feed act 3f2a sweep_archive
 camy feed dismiss 3f2a
 ```
 
-Each line shows a short id, the card type, the title, and how long ago it
-arrived. With nothing to show, `camy feed` prints
-`nothing in the feed — all quiet`.
+Each line shows a short id (`fd_3f2a`), the kind of card, the title, and
+how long ago it arrived. Approval, needs-input, escalation and alert cards
+that are still new or pending are marked `!` and counted in the line above
+the list (`2 cards · 1 need a decision`). Other cards are listed without
+the mark.
+With nothing to show, `camy feed` prints `nothing needs a decision`.
 
 By default `camy feed` lists new and pending cards only; `--all` lists
-every card regardless of status. `-L, --limit int` sets the page size
-(default 40).
+every card whatever its status, including held, snoozed, done, dismissed,
+expired, and archived ones. `-L, --limit int` sets the page size, 1 to 100
+(default 40); anything outside that is a usage error (exit 2) before any
+request goes out.
 
 See [camy feed](reference/camy_feed.md).
 
@@ -335,10 +388,12 @@ See [camy feed](reference/camy_feed.md).
 
 ```bash
 camy feed show 3f2a
+camy feed show 3f2a 90ac
 ```
 
 Prints the full card: title, type, body, and — when the card offers any —
-one line per available action with its action id and label.
+one line per available action with its action id and label. Name several
+ids to get a card each.
 
 See [camy feed show](reference/camy_feed_show.md).
 
@@ -362,47 +417,62 @@ Like `inbox send`, this confirms before firing: a TTY asks y/N, and a
 headless run without `--force` exits 2 — including under `--json`. Script
 it with `--force` once you trust the action id.
 
+If the server doesn't carry the press out, for instance because it came
+too late or the action needs a confirmation in the Camy app first, `act`
+fails with the server's reason (exit 1) instead of printing ✓.
+
 ```bash
 camy feed dismiss 3f2a
+camy feed dismiss 3f2a 90ac
 ```
 
-Puts a card away. Unlike `act`, `dismiss` does **not** ask for
-confirmation — a deliberate difference between the two, worth knowing
-before scripting either one.
+Puts one or more cards away, and fails the same way when the server
+refuses. Unlike `act`, `dismiss` does **not** ask for confirmation — a
+deliberate difference between the two, worth knowing before scripting
+either one.
 
 See [camy feed act](reference/camy_feed_act.md) and
 [camy feed dismiss](reference/camy_feed_dismiss.md).
 
 ### Short ids in the feed
 
-`show`, `act`, and `dismiss` resolve a short id against the newest 100
-cards — the server has no way to look further back by id prefix. A card
-older than that window is only reachable by its full id, and only for
-`act`/`dismiss`; `feed show` has no such fallback and reports the card as
-unreachable within the newest 100.
+`show`, `act`, and `dismiss` resolve a short id against the first 100 new
+and pending cards, highest priority first and then newest. If it isn't
+there, they resolve it against the first 100 cards of any status in the
+same order, so a done or dismissed card's short id resolves too. The server
+has no way to look further back by id prefix. A card outside that
+window is only reachable by its full id, and only for `act`/`dismiss`;
+`feed show` has no such fallback and reports the card as unreachable
+within the newest 100.
 
-`camy feed --all -L 100` lists every card a short id can still reach —
-`--all` on its own widens the status filter but keeps the default page
-size of 40.
+`camy feed --all -L 100` lists that second window — `--all` on its own
+widens the status filter but keeps the default page size of 40.
 
 ## `--json` output
 
 | Command | Emits |
 |---|---|
-| `inbox`, `inbox outbox`, `feed` | the raw array of rows the server returned — no counts header, no pager |
+| `inbox`, `inbox outbox`, `feed` | the raw array of rows the server returned — no counts line, no pager |
 | `inbox show`, `inbox read`, `feed show`, `sweep` | the full raw object for the one item requested |
 | `sweep review` | the server's whole review object, with the batches under a `batches` key |
 | `unsubscribe`, `reply`, `send`, `snooze`, `unsnooze`, `undo`, `sweep set`, `sweep restore`, `feed act`, `feed dismiss` | a small result object on success: either the server's own response, or a locally built `{"ok": true, ...}` for the few that construct their own confirmation |
-| `mark-read`, `archive`, `restore` | nothing at all — check the exit code |
+| `mark-read`, `archive`, `restore` | a locally built `{"ok": true, "email_id": "…", "action": "archive"}` |
 
-Empty lists differ by command. `camy inbox` emits `null` rather than `[]`,
-while `inbox outbox` and `feed` emit `[]` when the server sends an empty
-list. A script that iterates should write `jq '. // [] | .[]'` (or test
-for null) rather than `jq '.[]'`, so it survives either shape.
+An empty list is `[]`, never `null`, for all three listings, so
+`jq '.[]'` is safe on an empty inbox. `--raw` swaps the array for the
+server's own response object, which is where `next_cursor` lives for
+`--cursor`; with `--all` there is no single response to hand back, so the
+array stands.
+
+The verbs that take several ids (`inbox show`, `mark-read`, `archive`,
+`restore`, `undo`, `feed show`, `feed dismiss`) emit the object above when
+you name one id. Name several and you get an array with one object per id,
+each carrying the `ref` you typed, `ok`, and an `error` when that id
+failed. A single id that fails emits that same per-id object before the
+command exits non-zero.
 
 `inbox read` emits the same object `inbox show` does, then marks the
-message read. The per-id success lines of `mark-read`, `archive`, and
-`restore` are suppressed in machine mode and nothing replaces them.
+message read.
 
 The reference pages list flags, not payloads — run the command once with
 `--json` (or `--jq .`) to see the exact object a given verb returns.

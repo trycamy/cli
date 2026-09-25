@@ -35,17 +35,17 @@ Passing `"make build && make test"` as a single argument does not work; it
 arrives quoted and is treated as one command name.
 
 Because the whole result comes home in one response, output is capped. A
-command whose stdout and stderr together exceed 10MB fails with exit 255 and
-`response from /v1/workspaces/exec exceeds the 10MB cap`. Redirect chatty
-output to a file on the workspace (`-- sh -c 'make build > build.log 2>&1'`)
-and fetch or tail it separately.
+command whose stdout and stderr together come to more than about 50MB fails
+with exit 255 and an error saying the response exceeds the 50MB cap. Redirect
+chatty output to a file on the workspace
+(`-- sh -c 'make build > build.log 2>&1'`) and fetch or tail it separately.
 
 ### Flags
 
 | Flag | Effect |
 |---|---|
 | `--cwd DIR` | working directory on the workspace; camy passes the value through unchanged, so give an absolute workspace path — a bare `~/app` is expanded by your local shell into a path from your own machine, and quoting it (`--cwd '~/app'`) sends a literal tilde the workspace may not expand either |
-| `--timeout N` | wall-clock seconds to allow in the container; must be 1-600, or omit it (or pass 0) for the server default of 120 |
+| `--timeout N` | wall-clock seconds to allow in the container; must be 1-3600 (up to an hour), or omit it (or pass 0) for the server default of 120. A whole number outside 1-3600 other than 0 is refused with `--timeout must be between 1 and 3600 seconds`. A value that isn't a whole number is refused as an invalid argument. Both exit 2 before anything is sent |
 | `--no-wake` | refuse to wake a stopped workspace; exits 7 immediately instead of spending the command's timeout budget on an auto-start |
 | `--vm ID` | not available yet — the flag exists, but any value is refused; `exec` only ever runs on your primary workspace |
 
@@ -65,12 +65,19 @@ running. If it is not, and you passed `--no-wake`, the command exits
 immediately without starting anything.
 
 Otherwise it prints a note that it is waking the workspace and waits — but
-only within the same budget the command itself gets: `--timeout` seconds (120
-when you leave it out) plus about 30 seconds of margin.
+the wake and the command together have to finish within `--timeout` seconds
+plus two minutes of margin, or seven minutes in all when you leave `--timeout`
+out.
 
 A cold boot can take longer than that, in which case exec gives up with 255.
 Run [`camy vm start`](#camy-vm-start) first, or raise `--timeout`, when the
 workspace may be stopped.
+
+If you don't have a workspace at all, `camy vm exec` does not create one. It
+exits 7 with `you don't have a workspace yet — exec won't create one` and
+points you at [`camy vm provision`](#camy-vm-provision). A new workspace costs
+credits, so it is only made when you ask for it by name;
+[`camy vm sizes`](#camy-vm-sizes) lists what each size costs.
 
 ### Exit codes
 
@@ -79,9 +86,9 @@ workspace may be stopped.
 | Exit code | Meaning |
 |---|---|
 | 0-254 | the remote command's own exit code, mirrored exactly |
-| 2 | usage error caught before any network call: `--vm` given, or a non-zero `--timeout` outside 1-600 (`--timeout 0` means the same as omitting the flag) |
-| 7 | the workspace is not running and `--no-wake` was set |
-| 255 | camy's own failure — not a remote exit code: not signed in, the workspace was unreachable, or the workspace agent itself failed (for example a remote timeout) |
+| 2 | usage error caught before any network call: `--vm` given, or a non-zero `--timeout` outside 1-3600 (`--timeout 0` means the same as omitting the flag) |
+| 7 | the workspace is not running and `--no-wake` was set, or you don't have a workspace yet |
+| 255 | camy's own failure — not a remote exit code: not signed in, the workspace was unreachable, the service turned the command down, or the workspace agent itself failed (for example a remote timeout) |
 
 The mirrored code drives your own shell, so a local follow-up chains off it:
 
@@ -161,9 +168,13 @@ hangup unwinds the session cleanly, restoring your local terminal to normal
 A dropped network connection does not end `camy vm shell`: it redials in
 place instead of exiting. A reconnect opens a new shell and says so —
 nothing from the old session carries over, including anything you typed as
-it dropped, so retype it once you're back. After three reconnects within a
-minute, a fourth drop is not retried: the command stops with a
-`connection lost — could not reconnect` error.
+it dropped, so retype it once you're back.
+
+A connection that keeps dropping is not given up on. After ten reconnects
+within five minutes, camy waits a little before each further try, longer
+each time up to 30 seconds, and keeps going. The command stops with a
+`connection lost — could not reconnect` error only when a reconnect still
+can't reach the workspace after repeated attempts.
 
 `camy vm shell` is the one place where human-facing output is not sanitized:
 the PTY stream carries real terminal-control sequences that programs inside
@@ -186,15 +197,30 @@ See [`camy vm shell`](reference/camy_vm_shell.md).
 
 ## Lifecycle
 
+When the service turns `start`, `stop`, `exec` or `apps` down with a sentence
+of its own (a resize still in progress, for example), camy prints that
+sentence as the error: exit 255 for `exec`, exit 1 for the others. When the
+sentence says no workspace was found, the error also points you at
+[`camy vm provision`](#camy-vm-provision). One exception: `camy vm start`
+refused for lack of credits prints `you're out of credits` and exits 6 (see
+[exit codes](exit-codes.md)).
+
 ### `camy vm status`
 
 ```bash
 camy vm status
 ```
 
-Reports whether the workspace is running. Human output is one line: a status
-dot, the workspace's name, and its state. `--json` returns the server's status
-object as-is. See [`camy vm status`](reference/camy_vm_status.md).
+Reports whether the workspace is running. Human output opens with one line:
+a status dot, the workspace's state, and its instance id. Under it come a
+`size` row and an `address` row when the service reports them, then the
+commands that apply next: `camy vm exec`, `shell`, `apps` and `stop` while it
+runs, or `camy vm start` and `camy vm sizes` when it doesn't. The size is the
+machine's instance type (a tier key such as `plus` only while a resize is in
+progress), and the address is the workspace's public IP. `camy vm ls` and
+`camy vm sizes` show which size tier you are on. `--json` returns the
+server's status object as-is. See
+[`camy vm status`](reference/camy_vm_status.md).
 
 ### `camy vm start`
 
@@ -205,7 +231,7 @@ camy vm start
 Starts the workspace and blocks until it is actually ready — a cold boot can
 take a few minutes, so this can run for a while before it returns.
 
-It waits up to 12 minutes; past that the call gives up with a runtime error
+It waits up to 30 minutes; past that the call gives up with a runtime error
 (exit 1) even though the workspace may still be coming up — `camy vm status`
 tells you where it got to. The same ceiling applies to `stop`, `provision`,
 and `resize`. See [`camy vm start`](reference/camy_vm_start.md).
@@ -243,7 +269,8 @@ camy vm ls
 ```
 
 Lists every VM you own, across roles — not just your primary workspace. Each
-row shows a status dot, id, role, and state. See
+row shows a status dot, id, role, state, and size tier. With none, it says so
+and points you at `camy vm provision`. See
 [`camy vm ls`](reference/camy_vm_ls.md).
 
 ### `camy vm apps`
@@ -273,9 +300,20 @@ check that the workspace is running. See
 camy vm sizes
 ```
 
-Lists the available workspace size tiers, their specs, and their credit cost,
-along with whether the GPU add-on is on for your current workspace. The
-current size is marked. See [`camy vm sizes`](reference/camy_vm_sizes.md).
+Lists every workspace size tier with its vCPUs, memory, disk and credits per
+hour (blank when the service reports none). The list doesn't show whether
+your plan allows a given tier; `camy vm resize` is where a tier your plan
+doesn't include is refused.
+
+The tier your workspace is running right now is marked `running now`. The
+default tier is labelled `the default` unless it is the one running. When no
+workspace is running, nothing is marked `running now`.
+
+When the service reports it, a closing `gpu` line names the GPU add-on, says
+whether it is currently on or off, and gives what it adds per hour
+(`gpu <label> · on|off · +N credits/h`). That on/off is whether the add-on is
+switched on at the service, not whether your own workspace has a GPU. See
+[`camy vm sizes`](reference/camy_vm_sizes.md).
 
 ### `camy vm resize`
 

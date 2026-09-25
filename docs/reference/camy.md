@@ -29,7 +29,7 @@ camy [flags]
   -q, --quiet                     suppress non-data stderr
       --raw                       --json on a listing emits the endpoint's own envelope, not the normalised array
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
-      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe until 6 Oct 2026, then enforce where the OS can confine writes; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
   -V, --version                   print version
@@ -41,6 +41,7 @@ camy [flags]
 * [camy api](camy_api.md)	 - Any endpoint, authenticated — the escape hatch for what the tree hasn't wrapped
 * [camy approvals](camy_approvals.md)	 - the leash — approve · deny · answer
 * [camy auth](camy_auth.md)	 - sign in, inspect, sign out
+* [camy calls](camy_calls.md)	 - your call history, searchable by what was said
 * [camy canvas](camy_canvas.md)	 - what the agent built — files, sites, snapshots
 * [camy capture](camy_capture.md)	 - Anything on stdin (or argv) lands in Camy's memory intake
 * [camy chat](camy_chat.md)	 - talk to your agent — streams the reply and every tool call
@@ -61,6 +62,7 @@ camy [flags]
 * [camy mode](camy_mode.md)	 - how deep it thinks — agent · quick
 * [camy plan](camy_plan.md)	 - Your plan and credits — what's left today, this month, and where to change it
 * [camy profile](camy_profile.md)	 - Profiles: list, use
+* [camy runs](camy_runs.md)	 - what your agents did, and what they said
 * [camy schedule](camy_schedule.md)	 - recurring work — and when it fires next
 * [camy status](camy_status.md)	 - what's happening right now — one glance
 * [camy stop](camy_stop.md)	 - stop the resident agent, now

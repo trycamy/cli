@@ -67,11 +67,32 @@ camy doctor --json | jq '.[] | select(.ok == false)'
 
 ## Common situations
 
+### A server refusal (exit 1)
+
+When the server turns a request down for a reason camy has no name of its
+own for, the message carries the server's own sentence, and the request id
+follows when the server tagged the request. Most refusals (HTTP 400, 422
+and similar) put the HTTP status first:
+
+```text
+camy: HTTP 400: That code is invalid or has expired. Request a new one.
+      request <id>
+```
+
+A validation refusal (HTTP 422) names the field it didn't accept, as in
+`camy: HTTP 422: email: Field required`. A few statuses read differently. A
+409 is the server's sentence alone, with no status. A 404 reads
+`not found: <sentence>`. A 403 that isn't a scope, plan or credit refusal
+reads `blocked at the edge or forbidden: <sentence>`, with the hint
+`if this persists it's us, not you`. If the sentence doesn't tell you
+what to change, include that request id in a bug report; see
+[Getting request IDs for support](#getting-request-ids-for-support).
+
 ### Usage errors (exit 2)
 
 ```text
 $ camy approvals approve
-camy: accepts 1 arg(s), received 0
+camy: requires at least 1 arg(s), only received 0
       camy approvals approve --help shows usage
 ```
 
@@ -81,6 +102,16 @@ read.
 A value the CLI rejects locally — `--channel bogus`, `--timeout 5000`,
 [`camy mode`](reference/camy_mode.md) `fast` — is exit 2 too, but its hint
 names the flag's own contract, or there is no hint line at all.
+
+A value the server would reject is caught the same way, before anything is
+sent: a `--limit` outside the range a listing accepts, or a
+[`camy capture`](reference/camy_capture.md) longer than a capture holds. The
+message names the limit:
+
+```text
+$ camy inbox -L 500
+camy: --limit takes 1 to 200
+```
 
 A typo in the command name is a usage error as well, with a suggestion when
 one is close enough:
@@ -103,9 +134,13 @@ authenticates — a revoked key, an expired session. Run
 [`camy auth login`](reference/camy_auth_login.md), or set `CAMY_API_KEY` for
 a headless run. See [Authentication](authentication.md).
 
-When camy has recorded an expiry for the stored key and that moment has
-passed, the same exit 3 reads `camy: your session expired <date>` with the
-hint `camy auth login — one click renews it`.
+Those two lines are what you see when no key is stored. When the server
+turns down a stored key, a terminal draws a card titled `not signed in`
+instead. When camy has recorded an expiry for the stored key and that
+moment has passed, the same exit 3 draws a card titled
+`your sign-in expired`, with the message `your session expired <date>` and
+the fix `camy auth login`. The hint `camy auth login — one click renews it`
+appears only in the `--json` error object.
 
 ### Missing scope (exit 3)
 
@@ -144,22 +179,41 @@ camy: rate limited
       retry in 12s
 ```
 
-The API returned HTTP 429. `GET` requests already retry a couple of times on
+The API returned HTTP 429. `GET` requests already retry up to four times on
 your behalf with server-driven backoff before giving up. A write never
 retries automatically, so a 5 from one of those is yours to retry.
 
 When the server sends a `Retry-After`, the hint names the wait; otherwise it
 says `retry shortly`.
 
-### Plan (exit 6)
+### Plan or credits (exit 6)
 
 ```text
 camy: your plan doesn't include this
-      camy.ai/pricing
+      Workspace size 'xl' requires pro plan or higher — camy.ai/pricing ↗
 ```
 
 The API returned HTTP 402, or a 403 that means paid tier only, rather than
-an auth problem. There's nothing to fix client-side.
+an auth problem. The hint puts the server's own sentence, which usually
+names the size or tier you'd need, ahead of the pricing link. A 402 draws a
+card instead of two lines, with `camy.ai/p/plan` and `camy mode quick` as
+its fixes. There's nothing to fix client-side.
+
+Running out of credits is exit 6 too, and says so. Outside a chat turn the
+message is `you're out of credits`, never a plan or a missing-scope error.
+A 403 that carries only a sentence prints two lines, with the server's
+sentence as the hint. A 402, or the structured refusal a workspace
+provision, start or resize can send, draws a card whose fix is
+`camy.ai/p/plan`, where you add credits; otherwise wait for the daily
+refresh. Under `--json` the error's `hint` carries the server's sentence.
+For the structured workspace refusal it reads
+`add credits, or wait for the daily refresh`, and names how many credits
+the action needs against what you have only when the server sends both
+figures, and when they refresh when the server says.
+
+A `camy chat` turn refused for credits is different: the server's own text
+appears in the turn, and the process exits 6 with no further error line and
+no `--json` error object. See [Exit codes](exit-codes.md#6--plan).
 
 ### Workspace asleep (exit 7)
 
@@ -171,6 +225,14 @@ camy vm exec --no-wake -- pytest -q
 sleeping workspace. Drop it to let the workspace wake normally, or start it
 yourself first with [`camy vm start`](reference/camy_vm_start.md). See
 [Workspace](workspace.md).
+
+With no workspace at all, `camy vm exec` exits 7 too, rather than creating
+one on your behalf:
+
+```text
+camy: you don't have a workspace yet — exec won't create one
+      camy vm provision makes one (camy vm sizes lists what it costs)
+```
 
 ### Denied (exit 8)
 
@@ -304,6 +366,38 @@ one is refused the same way, pointing at `npm update -g @camy/cli`;
 `camy uninstall` behaves the same for both. See
 [Updating](installation.md#updating) and [npm](installation.md#npm).
 
+### When the new version doesn't start
+
+`camy update` runs the new binary once before it reports success. If the
+new binary doesn't start, or doesn't report the version it was meant to be,
+camy puts the version you were running back in place and exits 1. That case
+prints no message of its own in a terminal, so run the update again with
+`--json` to see what happened:
+
+```bash
+camy update --json
+```
+
+```json
+{
+  "current": "1.0.3",
+  "latest": "1.0.4",
+  "rolled_back": true,
+  "smoke_failure": "exit_nonzero",
+  "smoke_ok": false,
+  "staged": true,
+  "update_available": true,
+  "updated": false
+}
+```
+
+`smoke_failure` is `not_run`, `timeout`, `exit_nonzero` or
+`version_mismatch`. `rolled_back: true` means the version you were running
+is back in place. `rolled_back: false` means camy couldn't
+keep or restore its copy, and the new binary is still in place: reinstall
+the version you had with the installer, pinned with `CAMY_VERSION` (see
+[Installation](installation.md#environment-variables)).
+
 ### Why `camy update` ignores `CAMY_DL_BASE`
 
 `CAMY_DL_BASE` only affects the installer script and an unstamped
@@ -379,8 +473,9 @@ camy --verbose --json status
 ```
 
 Request IDs do not come from `-v`. They arrive in the JSON error object with
-`--json`, and inside a 5xx message as
-`camy.ai had a problem (request <id>)`.
+`--json`, inside a 5xx message as `camy.ai had a problem (request <id>)`,
+and as a last `request <id>` line under any other exit-1 error from a
+request the server tagged.
 
 That object carries `request_id` whenever the failing call was a REST
 request the server tagged with one. It is empty for errors that arrive over
@@ -400,7 +495,10 @@ if there is one.
 
 ## Where state lives, and what's safe to delete
 
-camy uses up to three directories on disk. The exact paths, and how the
+camy uses up to three directories on disk: cache, state, and config. The
+state directory, `~/.local/state/camy/`, holds one subdirectory per profile
+and one `update/` subdirectory shared by every profile, so the table gives
+the update copy its own row. The exact paths, and how the
 `XDG_*` variables override them, are in
 [Configuration: Where things live](configuration.md#where-things-live). camy
 does not write a separate log file; everything it prints goes to your
@@ -410,6 +508,7 @@ terminal's own scrollback.
 | --- | --- | --- |
 | Cache — `~/.cache/camy` | Reserved. Nothing is written here today, so the directory usually doesn't exist. | Safe any time. [`camy uninstall`](reference/camy_uninstall.md) removes it if it's there. |
 | Per-profile state — `~/.local/state/camy/<profile>/` | The 0600 credential fallback file (only written when your keychain isn't reachable), your cached granted scopes and key expiry, the last chat id that [`camy chat`](reference/camy_chat.md) `-c`, `camy chat attach`, [`camy canvas`](reference/camy_canvas.md), and `camy approvals … --wait` fall back to, your chat input history, the chat mode you set with `camy mode`, any local-tool results still waiting to be replayed, and your local-bridge trust grants. | Revokes your trust grants, so every trusted command and path is prompted for again. Loses your history and last-chat pointer, resets your chat mode to `agent`, and clears the cached scopes and expiry. |
+| Update copy — `~/.local/state/camy/update/` | The `camy` binary you were running before your last [`camy update`](reference/camy_update.md), readable only by you, kept so a new version that doesn't start can be put back. One copy, shared by every profile; the next update replaces it. | Safe any time. The next `camy update` keeps a fresh copy before it swaps. |
 | `config.toml` — `~/.config/camy/config.toml` | Your settings, profiles, and aliases. | Resets everything to defaults. Doesn't touch your stored credential. |
 
 Deleting per-profile state signs you out only if your key was living in the
@@ -422,7 +521,8 @@ clears the keychain entry (or the fallback file) and the cached state
 together.
 
 `camy uninstall` offers to remove all three directories for you, separately
-from removing the binary — see [Uninstalling](installation.md#uninstalling).
+from removing the binary. The update copy goes with the state directory it
+lives in. See [Uninstalling](installation.md#uninstalling).
 
 ## See also
 

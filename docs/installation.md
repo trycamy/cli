@@ -6,7 +6,7 @@ working with [`camy doctor`](reference/camy_doctor.md).
 
 ## Supported platforms
 
-- macOS, arm64 or amd64
+- macOS 13 or later, arm64 or amd64
 - Linux, arm64 or amd64
 
 Running under WSL2 counts as Linux: install and update the same way you
@@ -24,14 +24,22 @@ No `sudo` is used at any step. The script, in order:
    `https://dl.camy.sh/stable`) and an install directory (default
    `~/.local/bin`), then the version to fetch: either the value you passed
    in `CAMY_VERSION`, or the current version from that base's `VERSION`
-   file.
+   file. A `VERSION` older than the previous release is refused, so a
+   rolled-back mirror can't steer a fresh install onto an old build: the
+   installer published with 1.0.4 refuses anything older than 1.0.3. A
+   `CAMY_VERSION` pin is your own choice and skips that check.
 2. **Detects your platform.** OS (`darwin` or `linux`) and architecture
    (`arm64` or `amd64`, with `aarch64` and `x86_64` accepted as aliases).
 3. **Downloads and verifies.** It fetches your platform's release tarball
-   and the channel's cumulative `SHA256SUMS` index — one flat file covering
-   every published version — then checks the tarball's SHA-256 against the
-   matching line. Any mismatch, or no match, stops the install, and the
-   temp download directory is removed on the way out.
+   and that release's own checksum manifest, `SHA256SUMS-<version>`. If
+   `minisign` is installed, it verifies the manifest's signature with the
+   camy release key built into the script, and a missing signature or one
+   by any other key stops the install. Without `minisign` the check is
+   checksum only, and the summary line says so. It then checks the
+   tarball's SHA-256 against the manifest. Any mismatch, or no match, stops
+   the install, and the temp download directory is removed on the way out.
+   [Verifying releases](verifying-releases.md#what-the-installer-and-camy-update-check)
+   covers what each check proves.
 4. **Stages and installs atomically.** The tarball is unpacked in a
    temporary directory. The binary is staged as a randomly-named file
    inside your install directory — so the final swap is a same-filesystem
@@ -75,6 +83,7 @@ The rc file is chosen from your `$SHELL`:
 | `CAMY_VERSION` | Install this exact version instead of whatever the channel's `VERSION` file currently points at. |
 | `CAMY_INSTALL_DIR` | Install to this directory instead of `~/.local/bin`. |
 | `CAMY_NO_MODIFY_PATH` | Set to `1` to skip both the `PATH` symlink and the rc-file edit. The script prints the export line for you to add yourself. |
+| `CAMY_REQUIRE_SIGNATURE` | Set to `1` to refuse to install unless `minisign` is installed to verify the release signature. |
 | `CAMY_DL_BASE` | Download from this base URL instead of `https://dl.camy.sh/stable`. The installer honors it unconditionally — pointing it at a mirror is how the script itself is retargeted. Once `camy` is installed, `camy update` treats `CAMY_DL_BASE` differently; see [Updating](#updating). |
 
 ```bash
@@ -125,15 +134,25 @@ channel's verified tarballs, with npm provenance.
 
 ## Camy for Mac
 
-Running Camy [as a device on your own Mac](device.md) needs the Mac
+Running Camy's resident agent [on your own Mac](device.md) needs the Mac
 application, `Camy.app`: a notarized bundle around the same `camy` binary,
 available from 1.0.2 as `Camy_<version>_darwin.zip` on each
 [GitHub Release](https://github.com/trycamy/cli/releases/latest). Unzip it,
 move `Camy.app` to `/Applications` or `~/Applications`, and run
 `camy device install` from it to start the resident agent at every login.
 Every other command on this site works the same from the bundle's `camy` as
-from any other install; linking this Mac and installing the resident agent,
-`camy device enroll` and `camy device install`, insist on the bundle.
+from any other install, and you can link this Mac from any install. Only
+[`camy device install`](reference/camy_device_install.md) insists on the
+bundle. From any other install it exits 2 with this message:
+
+```text
+camy: Linking a computer only works from the Camy app — download it at
+      https://github.com/trycamy/cli/releases/latest and try again from there.
+```
+
+Despite its wording, the refusal is about installing the resident agent, not
+about linking. The link it gives is the latest GitHub Release, where the zip
+is.
 
 ## Manual download
 
@@ -228,11 +247,30 @@ isn't picked up automatically.
 camy update
 ```
 
-[`camy update`](reference/camy_update.md) downloads the current version for
-your platform, verifies its checksum against `SHA256SUMS` the same way the
-installer does, and swaps it into place with a single atomic rename. The
-running binary is never touched until the new one has been fully staged and
-verified, so a failed update leaves you exactly where you started.
+[`camy update`](reference/camy_update.md) fetches the new release's signed
+manifest and verifies its signature with the minisign key built into camy,
+then downloads the current version for your platform, checks it against
+that manifest, and swaps it into place with a single atomic rename. The
+running binary is never touched until the new one has been fully downloaded
+and verified, so a failed download or check leaves you exactly where you
+started. [Verifying releases](verifying-releases.md#what-the-installer-and-camy-update-check)
+covers the checks in full.
+
+Before the swap, camy keeps a copy of the version you were running in
+`~/.local/state/camy/update/` (`$XDG_STATE_HOME/camy/update/` when that is
+set). After the swap it runs the new binary once, and only when that binary
+starts and reports the version it was meant to be does camy say it updated:
+
+```text
+✓ updated — v1.0.3 → v1.0.4
+signature and checksum verified · swapped in place · next run is the new one
+```
+
+If the new binary doesn't start, camy exits 1 and, when it was able to keep
+a copy, puts the version you were running back in place. Otherwise
+reinstall with the installer and `CAMY_VERSION`; see
+[Troubleshooting](troubleshooting.md#when-the-new-version-doesnt-start).
+camy keeps one copy, and the next update replaces it.
 
 If the channel has nothing newer than the binary you are running, `camy
 update` prints `up to date` and exits 0 without downloading anything. It

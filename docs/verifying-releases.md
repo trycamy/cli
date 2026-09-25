@@ -199,7 +199,8 @@ public key above before trusting it, and the summary line says
 an install where that check cannot run. Without minisign the install rests
 on TLS plus the checksum, the same assurance package managers typically
 provide, and the summary says so. The installer also refuses a channel that
-names a release older than the one it shipped with.
+names a release older than the one before it shipped: every installer's
+floor is the previous release.
 
 `camy update`, from 1.0.1, goes further. Before it downloads anything it
 fetches the release's `SHA256SUMS-<version>` and its `.minisig`, verifies

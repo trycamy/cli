@@ -46,13 +46,22 @@ camy version --json
 {
   "arch": "arm64",
   "commit": "9f2c1ab",
+  "local_sandbox": {
+    "backend": "darwin",
+    "enforcement": "full",
+    "mode": "observe"
+  },
   "os": "darwin",
-  "version": "1.0.0"
+  "version": "1.0.4",
+  "wire_protocol": {
+    "speaks": 2
+  }
 }
 ```
 
-Illustration: `version` and `commit` are stamped into your build. Those four
-keys are the whole object.
+Illustration: `version` and `commit` are stamped into your build, and
+`local_sandbox` and `wire_protocol` are described below. Those six keys are
+the whole object.
 
 `--jq` and `--template` switch a command to machine output on their own: any
 one of the three puts the whole invocation into machine mode. Machine mode
@@ -65,40 +74,50 @@ Since 1.0.3 the shapes are uniform across commands:
 
 - A **listing** (`camy jobs --json`, `camy inbox --json`, `camy keys --json`,
   `camy connectors --json`, …) is a JSON **array** of rows — never the
-  server's envelope, and `[]` rather than `null` when it is empty. A
-  partial `--all` sweep that failed mid-way emits
+  server's envelope, and `[]` rather than `null` when it is empty, `--all`
+  sweeps included. When a page fails partway through `camy jobs --all` or
+  `camy webhooks deliveries --all`, the command emits
   `{"partial": true, "results": [...], "rows": N, "error": "..."}` so what
-  was already fetched is never thrown away.
+  was already fetched is never thrown away, as `camy api --paginate` does
+  (below). `camy inbox --all` instead exits with the error and prints no
+  rows.
 - A command that **shows one thing** (`camy jobs show ID --json`,
   `camy approvals show ID --json`, …) emits an **object**.
 - A verb that takes **several ids** (`camy approvals approve A B`,
   `camy tasks done A B`, `camy inbox archive A B`, …) emits one object when
   given one id — the shape it always had — and an array of per-id results
-  (`{"ref", "id", "ok", "error"?}`) when given more; the exit code is the
-  worst of the set, and every id is acted on even when one fails.
+  (`{"ref", "id"?, "ok", "error"?}`) when given more; the exit code is the
+  worst of the set, and every id is acted on even when one fails. A short
+  ref or prefix that matched none of your rows carries no `id`, only the
+  `ref` you typed. A full id is always echoed as `id`.
 - Every id in `--json` is the **full** id. Human output prints typed short
   ids (`ap_789a`, `em_7f31`, `jb_aab2`, `tk_2b28`, `ob_` for outbox rows);
   every verb accepts the typed form, a bare prefix of at least four
   characters, or the full id. `--ids=hex` prints the pre-1.0.3
-  eight-character form in human output for this one release.
+  eight-character form in human output; it is a compatibility flag, so
+  don't build new scripts on it.
 - `--raw` on a listing hands you the endpoint's own body instead of the
   array, for the wire shape; it does not apply to `--all` sweeps, and
   `camy approvals --json` stays narrowed (see below) with or without it.
 
 Where a command wraps a server response that is not a listing, the JSON is
 the server's own shape passed through unchanged. [`camy status --json`](reference/camy_status.md)
-gives you `approvals`, `inbox_counts`, `jobs`, `workspace`, `credits` and
-`run_meter`; what is inside them is defined by the API, not by the CLI, with
-`credits` the one exception below. `run_meter` holds context and credit usage
-for a turn in progress, and is `null` unless a turn is currently live on your
-last chat on this profile. Treat the keys camy itself documents as stable,
+gives you `approvals`, `inbox_counts`, `jobs`, `workspace`, `credits`,
+`run_meter` and `activity`; what is inside them is defined by the API, not by
+the CLI, with `credits` the one exception below. `run_meter` holds context
+and credit usage for a turn in progress, and is `null` unless a turn is
+currently live on your last chat on this profile. `activity` holds the
+server's counts of what Camy did in the last day, and is `null` when they
+can't be read. Treat the keys camy itself documents as stable,
 and treat a pass-through row as something that can gain fields.
 
-Three shapes are worth knowing because they are camy's own, not the server's:
+Four shapes are worth knowing because they are camy's own, not the server's:
 
-- `local_sandbox` in `camy --version --json` is camy's own: the `--sandbox`
-  mode in effect, the OS mechanism behind it, and whether it is enforced.
-  See [The local bridge](local-bridge.md).
+- `local_sandbox` in `camy version --json` (and `camy --version --json`) is
+  camy's own: the `--sandbox` mode in effect, the OS mechanism behind it,
+  and whether it is enforced. See [The local bridge](local-bridge.md).
+  `wire_protocol.speaks` beside it is the highest version of the chat
+  stream protocol this build understands, known without any connection.
 - `credits` in [`camy status --json`](reference/camy_status.md) is a
   deliberately narrowed object, not the balance endpoint's whole body:
   `plan`, `monthly_remaining`, `daily_remaining`, `daily_max`,
@@ -109,8 +128,13 @@ Three shapes are worth knowing because they are camy's own, not the server's:
   The exit code is driven only by `ok: false`; a row with `warn: true` never
   fails the command, so inspect `warn` per row if you care about it.
 - [`camy approvals --json`](reference/camy_approvals.md) is a deliberately
-  narrowed list — `checkpoint_id`, `chat_id`, `kind`, `tool_name`, `prompt`,
-  `parameters`, `status`, `created_at`, `expires_at`.
+  narrowed list — `checkpoint_id`, `family`, `subject_id`, `chat_id`,
+  `kind`, `tool_name`, `prompt`, `parameters`, `status`, `created_at`,
+  `expires_at`. Every row names its `family`. A row the checkpoint verbs
+  act on is `"family": "checkpoint"`, with `subject_id` equal to its
+  `checkpoint_id`. Any other decision waiting on you carries its own
+  `family` and `subject_id`, and its `checkpoint_id` is `""`, so filter on
+  `family` before you hand ids to `approve`, `deny` or `answer`.
   [`camy approvals show ID --json`](reference/camy_approvals_show.md) emits
   the full server row instead. The two shapes differ on purpose; do not
   assume one parser handles both.
@@ -133,7 +157,7 @@ These five keys are always present:
 | --- | --- |
 | `code` | stable machine name: `usage`, `auth`, `checkpoint_pending`, `rate_limited`, `plan`, `unavailable`, `checkpoint_denied`, `runtime` |
 | `exit` | the process exit code, the same number your shell sees |
-| `message` | one sentence describing what happened |
+| `message` | one sentence describing what happened. A server refusal camy has no name of its own for reads `HTTP <status>: <server sentence>` for most 4xx statuses (400, 422 and similar), the server's sentence alone for a 409, `not found: <sentence>` for a 404, and `blocked at the edge or forbidden: <sentence>` for a 403 that isn't a scope, plan or credit refusal |
 | `hint` | the single next thing to try, or `""` |
 | `request_id` | the server request id when a request happened, else `""` |
 
@@ -144,19 +168,25 @@ Two additions ride along when they apply:
 | `checkpoint_id` | on a checkpoint-pending error — hand it straight to [`camy approvals approve`](reference/camy_approvals_approve.md) |
 | `title`, `details` (rows of `{"label","value"}`), `fixes` (rows of `{"cmd","note"}`) | when the error carries a diagnosis card |
 
-`hint` stays a plain one-line collapse of `fixes`, so a consumer that reads
-only the five core keys loses nothing.
+`hint` is the error's own one-line hint. On a card error it can carry
+detail the card shows differently, such as the server's sentence, so it is
+not a collapse of `fixes`.
 
 stdout carries only data the command had already finished emitting. For most
 failures that is nothing at all, but see `camy doctor` above, and `camy api
 --paginate` and the `--all` sweeps of `camy jobs` and `camy webhooks
 deliveries` below.
 
-Two failures are deliberately silent instead: a non-zero remote exit code
-mirrored by [`camy vm exec`](reference/camy_vm_exec.md), and a turn the
-server refused outright (see NDJSON streams, below). Both set the exit code
-and print no error object on either stream. Treat a non-zero `$?` as
-authoritative, not the presence of an error line.
+Three failures are deliberately silent instead: a non-zero remote exit code
+mirrored by [`camy vm exec`](reference/camy_vm_exec.md), a turn the server
+refused outright (see NDJSON streams, below), and
+[`camy update`](reference/camy_update.md) when the new binary doesn't start.
+All three set the exit code and print no error object on either stream. The
+update exits 1, and under `--json` it writes its result object to stdout,
+with `updated: false`, `smoke_ok: false`, `smoke_failure` and
+`rolled_back`; see
+[When the new version doesn't start](troubleshooting.md#when-the-new-version-doesnt-start).
+Treat a non-zero `$?` as authoritative, not the presence of an error line.
 
 ### NDJSON for streams
 
@@ -171,17 +201,21 @@ camy chat --json "summarize today" | jq -r 'select(.type=="final") | .text'
 | --- | --- | --- |
 | `start` | `chat_id`, `turn_id`, `tier` | the turn begins; `tier` is what the server actually used |
 | `token` | `text` | a chunk of the streamed reply |
-| `tool_call` | `name`, `status`, `param` | a tool the agent invoked |
+| `tool_call` | `name`, `status`, `param`, and `duration_ms` when the server sends it | a tool the agent invoked |
 | `collection` | the collection's own fields | a structured result block |
 | `snapshot` | `text`, `active` | a plan or progress snapshot for the turn |
 | `checkpoint` | `id`, `kind`, `summary` | the turn paused for an approval |
+| `retry` | `dropped_chars`, `attempt`, `reason` | the model restarted its answer; `dropped_chars` counts the characters of `token` text already sent that are now void |
+| `resume_offer` | `chat_id`, `unsure`, and `held_until` when the hold's end is known | an earlier turn in this chat died partway through and is offered back; `unsure` lists steps whose outcome is unknown. See [An interrupted turn, offered back](chat.md#an-interrupted-turn-offered-back) |
 | `final` | `text` | the complete reply text |
 | `done` | `chat_id`, `turn_id` | the turn ended normally (plus `stopped: true` if you interrupted it) |
 | `error` | `code`, `message` | the turn ended abnormally |
 
 Frames camy does not model are passed through as
 `{"type": "<frame type>", "data": {…}}`, so a new server event is never
-silent data loss.
+silent data loss. Keepalive `ping` and `pong` frames never appear. Another
+chat on your account finishing or failing does not end this stream, and a
+`checkpoint_resolved` frame appears only for the card this turn answered.
 
 An abnormal end usually produces a terminal `error` event. Two ends do not. A
 fail-closed `checkpoint` is the last event before the process exits 4: the
@@ -195,34 +229,32 @@ or `checkpoint` and never hang.
 
 [`camy approvals approve <id> --wait`](reference/camy_approvals_approve.md)
 streams the resumed turn's events and ends on the stream's own `done`. When
-nothing streams here — the turn resumed and finished in your other open camy
-session — it prints one closing object instead.
+the turn does not stream here but camy can read what became of the
+checkpoint, it ends instead on one closing line of its own.
 
-That closing object is not an NDJSON line. It is indented JSON, or whatever
-`--jq` or `--template` render, since it goes through the same encoder as any
-other single value. Read the whole of stdout and parse it as one value rather
-than line by line. When the checkpoint completed:
-
-```json
-{
-  "chat_id": "…",
-  "checkpoint_id": "…",
-  "ran_elsewhere": true,
-  "type": "done"
-}
-```
-
-When it ended failed, rejected, expired or cancelled:
+That closing line is NDJSON like every event before it: one compact object
+on one line, so a line-at-a-time reader handles both endings the same way.
+When the checkpoint completed:
 
 ```json
-{
-  "chat_id": "…",
-  "checkpoint_id": "…",
-  "code": "checkpoint_<status>",
-  "message": "…",
-  "type": "error"
-}
+{"chat_id":"…","checkpoint_id":"…","ran_elsewhere":true,"type":"done"}
 ```
+
+When it did not run:
+
+```json
+{"chat_id":"…","checkpoint_id":"…","code":"checkpoint_<status>","message":"…","type":"error"}
+```
+
+`code` is `checkpoint_failed`, `checkpoint_rejected`, `checkpoint_expired` or
+`checkpoint_cancelled`, or `checkpoint_uncorrelated` when results came back
+but none could be tied to this approval. Each of those exits 1.
+
+A "did not resume" timeout writes no closing line. stdout simply ends after
+the last streamed event, the error object on stderr says
+`the turn did not resume within 2m0s of the approve`, and the process exits
+1. An attach that fails outright also ends with no closing line, only its
+error object. Check `$?` rather than rely on a closing line.
 
 There is no streaming variant of `camy status --watch`. It is interactive
 only and refuses under machine mode, telling you to poll `camy status --json`
@@ -276,19 +308,17 @@ through JSON first, so the template sees plain maps and slices under the JSON
 field names, and a newline is printed after the rendered output.
 
 Both apply to the single JSON value a command prints. They do not filter
-NDJSON stream events: a streaming command — `camy chat`, and the streamed
-part of `camy approvals approve --wait` — emits its events unchanged, so
-filter those with an external tool, as in the `camy chat` example under
-NDJSON for streams, above. The one closing object `approve --wait` prints
-when nothing streamed is not a stream event, and `--jq` / `--template` do
-apply to it.
+NDJSON stream events: a streaming command — `camy chat`, and
+`camy approvals approve --wait` down to its closing line — emits its events
+unchanged, so filter those with an external tool, as in the `camy chat`
+example under NDJSON for streams, above.
 
 A malformed expression or template is a usage error (exit 2). One that fails
 while running is a runtime error (exit 1).
 
 Field names inside a server response are chosen by the API. Pin your
 expressions to the keys camy documents — the top-level keys of
-`camy status --json`, the fields of `camy doctor --json`, the four keys of
+`camy status --json`, the fields of `camy doctor --json`, the six keys of
 `camy version --json` — and treat anything nested inside a pass-through row
 as something that can change shape.
 
@@ -388,7 +418,7 @@ The headless pattern is: run, catch exit 4, decide out of band, resume.
 ```bash
 camy --no-input chat "clean up the build directory"
 if [ $? -eq 4 ]; then
-  camy approvals --json --jq '.[].checkpoint_id'
+  camy approvals --json --jq '.[] | select(.family == "checkpoint") | .checkpoint_id'
 fi
 ```
 
@@ -401,12 +431,13 @@ Three things to budget for:
 
 - It needs a chat to attach to: `--chat`, or the last chat this profile used.
   With neither it prints a note and exits 0 without streaming anything.
-- It waits about 20 seconds before it believes a quiet chat really is idle,
-  and up to 120 seconds in total when the run is paused on a card being
-  decided in another open camy session. Budget roughly 120 seconds worst case
-  before you get a result or a "did not resume" error.
+- It waits about 120 seconds before it believes a quiet chat really is
+  idle, and up to 600 seconds in total when the run is paused on a card
+  being decided in another open camy session. Budget roughly ten minutes
+  worst case before you get a result or a "did not resume" error.
 - It exits 1 when the checkpoint's own terminal status comes back failed,
-  rejected, expired or cancelled. A "did not resume" error means this process
+  rejected, expired or cancelled, or when the result can't be tied to this
+  approval. A "did not resume" error means this process
   gave up watching, not that the approval was undone — read
   [`camy chats show <chat-id>`](reference/camy_chats_show.md) for what
   actually happened.
@@ -426,13 +457,13 @@ case $? in
   4) echo "waiting on an approval" >&2; exit 0 ;;
   3) echo "not signed in" >&2; exit 1 ;;
   5) echo "rate limited — back off and retry" >&2; exit 75 ;;
-  6) echo "plan doesn't cover this" >&2; exit 1 ;;
+  6) echo "plan or credits don't cover this" >&2; exit 1 ;;
   *) echo "failed" >&2; exit 1 ;;
 esac
 ```
 
 Ten codes, frozen for 1.x: `0` success, `1` runtime, `2` usage, `3` auth,
-`4` checkpoint pending, `5` rate-limited, `6` plan, `7` unavailable,
+`4` checkpoint pending, `5` rate-limited, `6` plan or credits, `7` unavailable,
 `8` checkpoint denied, and `255` for
 [`camy vm exec`](reference/camy_vm_exec.md)'s own failure. That command
 otherwise follows the ssh convention and mirrors a remote code from 0 to 254
@@ -440,9 +471,9 @@ straight to your shell. The table, the machine `code` names, and which
 command raises which are all in [Exit codes](exit-codes.md).
 
 Exit 5 is worth handling explicitly. camy already retries a rate-limited GET
-up to twice, honoring `Retry-After` — on the wrapped commands, not on `camy
-api`, which sends exactly one request. A 5 from a wrapped GET means those
-retries were spent, so back off rather than loop.
+up to four times, honoring `Retry-After` — on the wrapped commands, not on
+`camy api`, which sends exactly one request. A 5 from a wrapped GET means
+those retries were spent, so back off rather than loop.
 
 ## Cron and CI
 
@@ -469,10 +500,10 @@ camy inbox --needs-you --json --jq 'length'
 ```
 
 [`camy inbox`](reference/camy_inbox.md) prints a flat array of the server's
-own rows — `null` rather than `[]` when nothing matches, so guard with
-`jq '. // [] | length'` or the equivalent. The counts header you see
-interactively is stderr chrome and never appears in machine mode. Add
-`--all` to follow the cursor to the end.
+own rows, and `[]` when nothing matches, `--all` included. The counts header
+you see interactively is part of the human listing on stdout, and never
+appears under `--json`, `--jq` or `--template`.
+Add `--all` to follow the cursor to the end.
 
 ### A workspace step in CI
 
@@ -481,9 +512,10 @@ camy vm exec --timeout 600 -- pytest -q
 ```
 
 The remote exit code becomes the step's exit code, so a failing test suite
-fails the job with no extra plumbing. `--timeout` takes 1 to 600 seconds.
+fails the job with no extra plumbing. `--timeout` takes 1 to 3600 seconds.
 `--no-wake` makes a stopped workspace exit 7 instead of waiting minutes for
-an auto-start.
+an auto-start. With no workspace at all, `camy vm exec` exits 7 rather than
+creating one.
 
 Under `--json` the remote streams arrive inside a single object as `stdout`
 and `stderr` alongside `exit_code`, rather than on your own streams, while
@@ -549,13 +581,16 @@ camy chat -- "$UNTRUSTED"
 ```
 
 **[`camy capture`](reference/camy_capture.md)** sends anything on stdin to
-Camy's memory intake, up to 1 MiB. Pass `-` explicitly, or pipe with no
-argument at all:
+Camy's memory intake. Pass `-` explicitly, or pipe with no argument at all:
 
 ```bash
 pbpaste | camy capture -
 git log --oneline -20 | camy capture --title "this week's commits"
 ```
+
+A capture holds up to 20,000 characters and its title up to 500. Anything
+longer, or more than 1 MiB on stdin, is a usage error (exit 2) before
+anything is sent, never a silent cut.
 
 **`camy api`** reads a JSON request body from stdin for POST, PUT and PATCH
 when no `--field` was given, as described above.

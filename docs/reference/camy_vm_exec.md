@@ -25,7 +25,7 @@ camy vm exec -- CMD... [flags]
       --cwd string    working directory on the workspace
   -h, --help          help for exec
       --no-wake       exit 7 instead of waking a stopped workspace
-      --timeout int   in-container wall clock in seconds (1-600; server default 120)
+      --timeout int   in-container wall clock in seconds (1-3600; server default 120)
       --vm string     run on a specific VM id (not available yet; exec runs on your primary workspace)
 ```
 
@@ -51,7 +51,7 @@ camy vm exec -- CMD... [flags]
   -q, --quiet                     suppress non-data stderr
       --raw                       --json on a listing emits the endpoint's own envelope, not the normalised array
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
-      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe until 6 Oct 2026, then enforce where the OS can confine writes; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
 ```

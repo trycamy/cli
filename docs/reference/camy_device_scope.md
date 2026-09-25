@@ -30,7 +30,7 @@ Grant, remove, or list what a linked computer may touch
   -q, --quiet                     suppress non-data stderr
       --raw                       --json on a listing emits the endpoint's own envelope, not the normalised array
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
-      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe until 6 Oct 2026, then enforce where the OS can confine writes; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
 ```
@@ -38,7 +38,7 @@ Grant, remove, or list what a linked computer may touch
 ### SEE ALSO
 
 * [camy device](camy_device.md)	 - Link this computer to your Camy account and run as a resident agent
-* [camy device scope add](camy_device_scope_add.md)	 - Grant a capability, optionally scoped to one or more paths
+* [camy device scope add](camy_device_scope_add.md)	 - Grant a capability over one or more paths
 * [camy device scope list](camy_device_scope_list.md)	 - What this computer may currently touch
 * [camy device scope remove](camy_device_scope_remove.md)	 - Take away one grant
 

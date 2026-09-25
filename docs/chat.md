@@ -13,8 +13,9 @@ you to answer. The bare `camy` command, with no arguments, opens a
 persistent full-screen app instead — the same agent, kept open across many
 turns.
 
-This page covers both surfaces, plus `camy chats` for browsing past
-sessions, `camy mode` for choosing how deep the agent thinks, and the
+This page covers both surfaces, plus `camy chats` for browsing and
+searching past sessions, `camy calls` for searching your call history,
+`camy mode` for choosing how deep the agent thinks, and the
 project-instructions and inline-image behavior that only show up while
 you're chatting.
 
@@ -28,8 +29,10 @@ camy sends the message as a new turn and streams the reply to stdout as it
 arrives. Tool calls the agent makes along the way — reading a file, running
 a command — are traced to stderr as they happen, never printed as part of
 the reply. If a tool call needs your approval before it can run, camy shows
-an approval card; see [Approvals](approvals.md) for how those work and what
-happens when nothing is there to answer them.
+an approval card, headed with the action in words
+(`APPROVAL — send an email`) rather than the tool's internal name; see
+[Approvals](approvals.md) for how those work and what happens when nothing
+is there to answer them.
 
 Each trace closes on its own line with what came back — `✓ 4 emails · 0.6s`, `✗ exit 1 · 0.4s`, `! awaiting approval` — so a turn reads as a ledger of what ran and what it found.
 
@@ -84,10 +87,25 @@ When the turn ends, camy exits with a code describing how it ended:
 
 The full, command-independent table lives in [Exit codes](exit-codes.md).
 
-In a human terminal, a completed turn prints a one-line footer: `camy chats
-show <id>` if the turn approved anything, so you know where to look to undo
-it, or a quiet trailer — the tier that actually ran, how long the turn took, the chat id — and the commands that continue it.
-A `--temp` turn prints neither line — there is nothing to show or continue.
+In a human terminal, a completed turn ends in a quiet trailer on stderr —
+the tier the server reported for the turn (`agent` when none was
+reported), how long the turn took, the chat id — and a line of commands
+that continue it (`camy chat -c`, `camy chats show <id>`). If the turn
+approved anything, that line leads with `camy chats show <id>`, so you know
+where to look to undo it. A `--temp` turn prints none of this — there is
+nothing to show or continue.
+
+When a turn stops on an approval camy can't prompt for, there is no
+trailer. camy exits 4 and prints the checkpoint id, with
+`camy approvals approve <id>` as the hint. A `--temp` chat can't hold an
+approval, so it exits 4 without an id.
+
+A turn stopped from somewhere else, such as the web's stop button or
+another device, keeps whatever reply had already streamed, prints
+`stopped` on stderr, followed by the usual trailer at a terminal, and
+exits 0. Exit 1 is only for a stop or detach you trigger with Ctrl-C. In
+`--json` mode, check the `done` event's `"stopped": true`, not the exit
+code.
 
 Full flag reference: [camy chat](reference/camy_chat.md).
 
@@ -106,10 +124,11 @@ isn't one yet, camy says so and starts fresh instead.
 camy chat --chat 2f1c9ab3 "keep going on that one"
 ```
 
-`--chat` targets a specific chat by id. A short prefix (from `camy chats`)
-resolves the same way it does everywhere in camy: under 4 characters is
-refused outright, and a prefix matching more than one chat is a usage error
-rather than a guess.
+`--chat` targets a specific chat by id. The short id `camy chats` prints
+(`ch_2f1c`), or a prefix of the full id, resolves the same way it does
+everywhere in camy: under 4 characters is refused outright, and a prefix
+matching more than one chat is a usage error rather than a guess. Archived
+chats resolve too, so an id `camy chats search` prints for one works here.
 
 ```bash
 camy chat --temp "just testing something, don't save this"
@@ -215,11 +234,42 @@ named, rather than silently attaching a different one.
 
 Full flag reference: [camy chat attach](reference/camy_chat_attach.md).
 
-## Past chats: list, show, export
+## An interrupted turn, offered back
+
+If an earlier turn in this chat died partway through and camy.ai is still
+holding it, camy offers it back once the current turn is over, never in the
+middle of a reply. The offer is drawn as an approval-style card headed
+`INTERRUPTED`: what you originally asked, the step it stopped on, and how
+long the hold has left (`held 28 minutes`), each shown only when the server
+says so. The step it stopped on is shown only when no step is unsure.
+
+```text
+resume? [y/N]
+```
+
+Answer `y` to resume it: the resumed turn streams to its end like any
+other. In `camy chat` and the accessible REPL, any line other than `y`,
+`yes`, `r` or `resume` (or `f`/`fresh` on an unsure card), including an
+empty Enter, leaves it held and sends nothing. So does waiting 120
+seconds. In the full-screen app, Esc on the card leaves it held too.
+
+If the outcome of a step is unknown, the heading says so
+(`INTERRUPTED — one step unsure`), the card lists `unsure <tool>` for each
+such step, and the question becomes `[resume/fresh]`: `resume` picks the
+turn back up with the unsure step skipped, `fresh` clears the hold, and
+Enter keeps it held.
+
+This happens in `camy chat`, the full-screen app, and the accessible REPL.
+Headless and `--no-input` turns are never asked, and in `--json` mode the
+offer arrives as a `resume_offer` event (`chat_id`, `unsure`, and
+`held_until` when the hold's end is known) instead of a question.
+
+## Past chats: list, search, show, export
 
 ```bash
 camy chats
 camy chats list --all
+camy chats search "invoice"
 camy chats show 2f1c9ab3
 camy chats export 2f1c9ab3 > transcript.md
 camy chats prune
@@ -231,7 +281,8 @@ agent chats are kept.
 `camy chats` (or `camy chats list`) lists your sessions newest first, 25 at
 a time by default. The two paging flags live on the subcommand: `camy chats
 list -L 50` changes the page size and `camy chats list --all` shows
-everything.
+everything. Archived chats stay out of the list, but `camy chats search`
+finds them, and their short ids resolve anywhere a chat id is taken.
 
 `camy chats show ID` renders a transcript through the same markdown
 pipeline live chat uses. `camy chats export ID` writes a portable markdown
@@ -240,10 +291,90 @@ accept a short id prefix the same way `--chat` does, and both hide the
 internal checkpoint-response bookkeeping a raw transcript would otherwise
 clutter the reading with.
 
+### Searching past chats
+
+```bash
+camy chats search "invoice"
+camy chats search "invoice" --chat ch_0a4f
+camy chats search invoice march -L 50
+```
+
+`camy chats search` finds messages across every chat you have, archived
+ones included. Every word after `search` is part of the query, so quotes
+are optional.
+
+The first line counts the hits on this page (`3 matches in 2 chats`).
+Raise `-L` (up to 100) to see more. Hits are
+grouped under their chat in the order the server ranked them: each group
+opens with the chat's short id and title (with `- archived` after it for
+an archived chat), then one row per matching message — `you` or `camy`, a
+short excerpt around the first word you searched for, and how long ago it
+was said. When a chat has more matches than the page shows, an
+`N more in this chat` line says what the page left out. The last line
+points at `camy chats show` and
+`camy chat --chat` for the first chat. The checkpoint bookkeeping that
+`chats show` hides never appears as a hit.
+
+- `--chat ID` searches one conversation. It takes a short id the same way
+  `camy chat --chat` does.
+- `-L`/`--limit` sets the page size: 1 to 100, 25 by default, best
+  matches first.
+- The query is capped at 100 characters. An empty query, a longer one, or
+  a `-L` outside 1 to 100 is a usage error (exit 2) before anything is
+  sent.
+
+With no hits it prints `nothing matched "invoice"`. If the server ranked
+only the newest 500 matches, a line under the results says older ones may
+be missing, so a cut-short list never reads as complete. Search is capped
+at 30 requests a minute; past that the command exits 5 (rate limited).
+
+Under `--json` you get the server's whole response object rather than a
+bare array, including `candidates_truncated`, which says whether older
+matches were left out of the ranking.
+
 Full flag reference: [camy chats](reference/camy_chats.md),
 [camy chats list](reference/camy_chats_list.md),
+[camy chats search](reference/camy_chats_search.md),
 [camy chats show](reference/camy_chats_show.md),
 [camy chats export](reference/camy_chats_export.md).
+
+## Your call history
+
+```bash
+camy calls search "the plumber"
+camy calls search "invoice" --filter need_you
+```
+
+`camy calls` holds your call history, and its one verb, `search`, finds a
+call by what was said on it. `camy calls` on its own prints its help.
+
+The first line counts the hits (`4 calls matched`). Each call then shows
+the caller (the name when there is one, otherwise the number, otherwise
+`Unknown caller`), the group it was sorted into, and how long ago it came
+in, with a line of the transcript underneath and the words that matched in
+bold — or the call's summary when there is no matching excerpt.
+
+- `--filter` narrows the search to one group: `all`, `need_you`,
+  `messages`, `handled`, or `spam`. Anything else is a usage error
+  (exit 2), checked before the search is sent.
+- `-L`/`--limit` sets the page size: 1 to 200, 25 by default, most recent
+  first.
+- The query is capped at 200 characters.
+
+With no hits it prints `no call matched "the plumber"`. When your
+transcripts are cleared after a set number of days, a second line says so:
+older calls then match by caller only. If more calls matched than the
+search could scan, a line says older ones may be missing. Like chat
+search, call search is capped at 30 requests a minute (exit 5 past it).
+
+If searching calls isn't available on your account, the command prints
+`Searching your calls isn't on for your account yet.` and exits 1.
+
+Under `--json` you get the server's response object untouched; the words
+that matched in each snippet stay wrapped in `[[` and `]]`.
+
+Full flag reference: [camy calls](reference/camy_calls.md),
+[camy calls search](reference/camy_calls_search.md).
 
 ## The full-screen app
 
@@ -293,17 +424,19 @@ of those keys and every slash command.
 | `/jobs` | What's scheduled and when it next fires. |
 | `/vm` | Your cloud workspace. |
 | `/new` | Starts a fresh chat; the old one stays in `/chats`. |
-| `/chats` | Opens a picker over every conversation; `/chat ID` switches straight to one. |
+| `/chats` | Opens a picker over your chats, with archived ones left out; `/chat ID` switches straight to one by its short id, archived or not. |
 | `/plan` | The agent's checklist for this turn, as a pane; the status row counts it (`3 of 5 done · /plan`). |
-| `/queue` | What is waiting to send when this turn ends: Enter steers a message in next, `d` drops it. |
+| `/queue` | What is waiting to send when this turn ends. Enter steers the chosen message into the running turn now (`steered:`); it leaves the queue only once the turn has taken it, and otherwise goes next (`next:`). `d` drops it. |
 | `/usage` | Your plan and credits — the same pane as `camy plan`. Credits never appear on the status row. |
 | `/help` | Keys and commands (also `?` or F1). |
-| `/<verb>` | Any read-only camy verb — `/feed`, `/tasks`, `/plan`, `/doctor`, `/schedule` … — runs through the same renderer into the transcript. |
+| `/<verb>` | Any read-only camy verb — `/feed`, `/tasks`, `/canvas`, `/doctor`, `/schedule` … — runs through the same renderer into the transcript. |
 | `/quit` | Leaves — anything scheduled keeps running. |
 
-Esc asks the server to stop the turn that's generating and waits for the
-confirmation — Esc again hands the composer back at once. The menu keeps
-working while a turn runs. Two Ctrl-C's in quick succession leave the app.
+Esc stops any command the turn is running on this machine, asks the server
+to stop the turn that's generating, and waits for the confirmation — Esc
+again hands the composer back at once. When the stop lands, the transcript
+says `stopped`. The menu keeps working while a turn runs. Two Ctrl-C's in
+quick succession leave the app.
 
 ### `--inline` and `--accessible`
 
@@ -318,12 +451,14 @@ Two flags change how the app draws without changing what it can do:
   the full-screen app entirely and drops you into a plain line-by-line
   REPL instead: no redraws, no spinners, no boxes.
 
-The REPL's slash set is the same one, minus `/compact` and the app's
-`/chats show ID` form, and plus `/last`, which prints the current chat id, and `/attach` (also
+The REPL's slash set is a shorter one. It has no `/compact`, `/plan`,
+`/queue`, `/usage`, `/<verb>` passthrough or `/chats show ID`, and adds
+`/last`, which prints the current chat id, and `/attach` (also
 `/resume`), which rejoins a detached or dropped turn:
 `/new`, `/chat ID`, `/mode`, `/approvals`, `/inbox`, `/status`, `/jobs`,
 `/vm`, `/chats`, `/last`, `/attach`, `/help`, and `/quit` (also `/exit` and `/q`, which
-work in the full-screen app too).
+work in the full-screen app too). In the REPL, `/status`, `/inbox`,
+`/jobs` and `/vm` print the one-shot output instead of a pane.
 
 Each of those delegates to the same one-shot logic
 [`camy approvals`](reference/camy_approvals.md),
@@ -426,10 +561,15 @@ the stream itself; pipe the NDJSON to `jq` for that, as in the example
 above.
 
 The event types are `start`, `token`, `tool_call`, `collection`,
-`snapshot`, `checkpoint`, `final`, `done`, and `error`. Frames with no
-dedicated event type of their own — `response_envelope`, `chain_progress`,
-`plan_updated`, and anything new the server adds — pass through as
-`{"type": "<frame type>", "data": {…}}`. [Scripting with
+`snapshot`, `checkpoint`, `retry`, `resume_offer`, `final`, `done`, and
+`error`. A `retry` event means the model restarted its answer: its
+`dropped_chars` says how many characters of the `token` text already sent
+are void. Frames with no dedicated event type of their own —
+`response_envelope`, `chain_progress`, `plan_updated`, and anything new the
+server adds — pass through as `{"type": "<frame type>", "data": {…}}`.
+Keepalive frames never appear in the stream, and a `checkpoint_resolved`
+frame passes through only for the card this turn is about, so an approval
+resolving in another chat never reads as an event of this turn. [Scripting with
 camy](scripting.md) has the field-by-field table, the full stdout/stderr
 contract, `--jq`/`--template`, and the frozen exit-code table shared across
 every command.

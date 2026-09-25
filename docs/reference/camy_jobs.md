@@ -12,6 +12,7 @@ camy jobs [flags]
 camy jobs                        live and needs-you jobs
 camy jobs show jb_aab2           one job, its history, what it's stuck on
 camy jobs cancel jb_aab2         cancel it — its schedule too
+camy jobs search "invoice"       one job by the words you set it up with
 ```
 
 ### Options
@@ -46,7 +47,7 @@ camy jobs cancel jb_aab2         cancel it — its schedule too
   -q, --quiet                     suppress non-data stderr
       --raw                       --json on a listing emits the endpoint's own envelope, not the normalised array
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
-      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe until 6 Oct 2026, then enforce where the OS can confine writes; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
 ```
@@ -56,5 +57,6 @@ camy jobs cancel jb_aab2         cancel it — its schedule too
 * [camy](camy.md)	 - Camy in your terminal — the same agent, memory, and cloud computer you run at camy.ai
 * [camy jobs cancel](camy_jobs_cancel.md)	 - Cancel a job (its schedule too)
 * [camy jobs run-now](camy_jobs_run-now.md)	 - Pull the next fire to now
+* [camy jobs search](camy_jobs_search.md)	 - Find a job by what you asked for
 * [camy jobs show](camy_jobs_show.md)	 - One job + its firing history
 

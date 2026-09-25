@@ -22,9 +22,8 @@ By default, `camy auth login` uses a browser device flow.
    ```text
      camy — sign in from your browser
 
-     confirm this code there:  <CODE>
-
-     <verification link>
+     confirm this code there   <CODE>
+     <verification link> ↗
    ```
 
 2. camy opens the link in your browser, but only when it is on the same
@@ -33,7 +32,9 @@ By default, `camy auth login` uses a browser device flow.
    aborts the sign-in, and points you at `camy auth login --code` (the email
    plus one-time code flow) instead.
 3. You confirm the code on the page. camy polls in the background until you
-   approve or deny it. If the server reports the code expired, camy stops
+   approve or deny it, showing `waiting for you to click` with
+   `ctrl-c cancels · nothing is granted until you click` beneath it. If the
+   server reports the code expired, camy stops
    with `that code expired`; camy gives up on its own after 11 minutes with
    `sign-in timed out`.
 4. On approval the server mints an API key with the scopes camy asked for at
@@ -93,6 +94,88 @@ falls back to the email-code flow automatically and tells you it's doing so.
 See [`camy auth`](reference/camy_auth.md) for the whole sign-in command
 group.
 
+## Linking this Mac as you sign in
+
+On an interactive terminal, the browser sign-in also links this Mac to your
+account. One approval gives you two credentials: this terminal's key, stored
+as above, and this Mac's own credential, stored the same way. Linking also
+makes a signing key on this Mac and keeps it in a file (see
+[Your Mac as a device](device.md#link-this-mac)). Pass `--no-device` to sign
+in without linking:
+
+```bash
+camy auth login
+camy auth login --no-device
+```
+
+The handoff says what the click will also do:
+
+```text
+  camy — sign in from your browser
+
+  confirm this code there   <CODE>
+  <verification link> ↗
+
+  that click also links MacBook Air — it can't do anything until you say
+  ⋮ key kept in a file on this Mac · reads only
+```
+
+When you approve, camy prints the signed-in card, then the link, then offers
+to let Camy read the folder you ran the command in:
+
+```text
+  ✓ linked      MacBook Air · key kept in a file on this Mac · reads only
+
+  ╭──────────────────────────────────────────────────────────────────────────╮
+  │ GRANT · read one folder                                      MacBook Air │
+  ├──────────────────────────────────────────────────────────────────────────┤
+  │ Let Camy read ~/Projects/lattice-brief                                   │
+  │                                                                          │
+  │ reads  files, listings, search · nothing runs, nothing changes           │
+  │ scope  this folder and beneath it · nothing else on this Mac             │
+  │ later  Settings → Your computers · or camy device scope add              │
+  ╰──────────────────────────────────────────────────────────────────────────╯
+  y grant · N skip, the default — the Mac stays linked, does nothing
+  grant? [y/N]
+```
+
+`y` grants reading on that folder; if Camy refuses the grant, camy prints
+its reason. `N`, the default, grants nothing, and so does no answer within
+two minutes: the Mac stays linked and can do nothing until you add a grant
+with [`camy device scope add`](device.md#grant-and-remove-scopes) or in
+Settings. camy doesn't offer the card when you run it from your home folder
+or from `/`. If you deny the sign-in, cancel it, or let the code expire,
+nothing is linked either.
+
+camy signs in without linking, and says nothing about linking, when:
+
+- you pass `--no-device`, or `CAMY_NO_LOCAL=1` is set
+- stdin or stderr isn't a terminal, or you ask for `--json`, `--jq`, or
+  `--template`
+- this Mac is already linked; the sign-in then renews only this terminal's
+  key
+- you sign in with `--code` or `--with-key`
+- the server doesn't offer linking at sign-in
+
+A Mac counts as already linked while it still holds its local link record,
+even if you revoked the link on camy.ai. To link it again, whether through
+`camy auth login` or `camy device enroll`, run `camy device forget` first.
+
+The sign-in completes even when the link doesn't. If the approval comes back
+without linking this Mac, camy says so and names the way to link it later,
+or prints Camy's own reason when Camy refused the link:
+
+```text
+  ⋮ MacBook Air wasn't linked — camy device enroll links it
+```
+
+If Camy refuses the combined sign-in before it starts, camy says so once and
+runs the plain sign-in:
+
+```text
+This Mac won't be linked this time (<reason>) — signing in without it; camy device enroll links it later.
+```
+
 ## Signing in with a code or a key
 
 ### `--code`: email and a one-time code
@@ -103,11 +186,14 @@ camy auth login --code
 
 camy prompts for your email, sends a one-time code, then prompts for the
 code. If your account has two-factor authentication enabled, camy prompts
-for an authenticator or backup code next; a failed authenticator code is
-retried once as a backup code automatically.
+for an authenticator code or a backup code next, and checks what you type as
+either one. If it matches neither, camy stops with
+`that authenticator or backup code didn't match`; run
+`camy auth login --code` again.
 
 Accounts whose only second factor is a passkey (WebAuthn) can't complete a
-code sign-in from the terminal — camy detects this and points you at
+code sign-in from the terminal — camy detects this and points you at creating
+a key at `https://camy.ai/p/settings/developer` and signing in with
 `--with-key` instead. If code sign-in is disabled on the server you're
 pointed at, `--code` fails with `code sign-in is disabled here` and the same
 hint.
@@ -118,8 +204,10 @@ hint.
 camy auth login --with-key
 ```
 
-camy prompts for a key on the terminal (never on stdin) and checks that it
-looks like a camy key (`camy_live_…` or `camy_test_…`) before storing it.
+camy prompts for a key on the terminal (never on stdin), naming
+`https://camy.ai/p/settings/developer` as the place to create one, and checks
+that it looks like a camy key (`camy_live_…` or `camy_test_…`) before storing
+it.
 This is the way to install a key that was created elsewhere — for example
 one shown once by `camy keys rotate`.
 
@@ -143,7 +231,7 @@ with, and camy reads them back from your key list.
 | `--scopes` | Requests |
 |---|---|
 | unset | camy's default set — the scopes marked below |
-| `all` | every scope the server knows about |
+| `all` | every scope the server registers except `device:link` |
 | `+add,-remove` | the default set, adjusted |
 | `chat:read,files:read` | exactly that list, replacing the default set |
 
@@ -153,8 +241,19 @@ the server doesn't register is rejected as `unknown scope` when you add it
 (`+scope`) or name it in a bare list. A `-scope` removal isn't checked — a
 name that isn't in the set is silently ignored.
 
-Signing in without network access, or against an older server, falls back to
-camy's own compiled-in list.
+When camy can't fetch the server's list of scopes (you're offline, the
+server is older, or its answer is malformed), it uses its own compiled-in
+list instead, both to check `+scope` and bare lists and to expand `all`.
+
+`device:link` belongs only to this Mac's own credential, never to a
+terminal's key.
+`--scopes all` leaves it out, so signing in with it still links this Mac, and
+naming it (`+device:link`, or in a bare list) is a usage error:
+
+```text
+camy: device:link isn't a scope for this terminal's key — it belongs to this Mac's own key
+      camy auth login links this Mac as it signs in; camy device enroll links it later
+```
 
 | Scope | Covers | Default |
 |---|---|---|
@@ -286,7 +385,9 @@ camy auth logout
 
 Removes the key from this machine — the keychain entry or fallback file —
 and clears its cached scopes and expiry. This needs no confirmation and
-always succeeds locally, even if the key was already invalid.
+always succeeds locally, even if the key was already invalid. It doesn't
+touch this Mac's link, its signing key, or its own credential; see
+[Take it back](device.md#take-it-back) for those.
 
 ```bash
 camy auth logout --revoke
@@ -357,13 +458,16 @@ account — short id, prefix, name, and when each was created and last used.
 
 ```bash
 camy keys rotate <id>
-camy keys revoke <id>
+camy keys revoke <id> [<id>...]
 ```
 
 `rotate` replaces a key with a new one carrying the same scopes and prints
-the new full key once, to stdout. `revoke` kills a key server-side
-immediately. Both take a short id prefix (at least 4 characters) or a full
-id, and both ask for confirmation unless you pass `--force`.
+the new full key once, to stdout. `revoke` kills one or more keys server-side
+immediately, with a single confirmation for the whole set; it carries on past
+an id that fails and exits non-zero if any did. Both take a short id prefix
+(at least 4 characters) or a full id, and both ask for confirmation unless
+you pass `--force`. With `--json`, revoking one key prints one object and
+revoking several prints an array with one result per id.
 
 Neither command touches the key stored locally on this machine. If you
 rotate the key your current profile is actively using, re-store the new
@@ -416,6 +520,7 @@ ladder.
 |---|---|---|
 | `--code` | [`camy auth login`](reference/camy_auth_login.md) | email plus a one-time code instead of the browser |
 | `--with-key` | [`camy auth login`](reference/camy_auth_login.md) | paste an existing key |
+| `--no-device` | [`camy auth login`](reference/camy_auth_login.md) | sign in without linking this Mac |
 | `--scopes` | [`camy auth login`](reference/camy_auth_login.md) | scope grammar: `+add,-remove` relative to the default set, a bare list, or `all`; browser flow and `--code` only, ignored with `--with-key` |
 | `--revoke` | [`camy auth logout`](reference/camy_auth_logout.md) | also revoke the key server-side |
 | `--confirm revoke` | [`camy auth logout`](reference/camy_auth_logout.md) | confirmation word for `--revoke` in scripts |

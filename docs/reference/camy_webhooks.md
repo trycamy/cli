@@ -34,7 +34,7 @@ camy webhooks [flags]
   -q, --quiet                     suppress non-data stderr
       --raw                       --json on a listing emits the endpoint's own envelope, not the normalised array
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
-      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe until 6 Oct 2026, then enforce where the OS can confine writes; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
 ```
@@ -42,6 +42,7 @@ camy webhooks [flags]
 ### SEE ALSO
 
 * [camy](camy.md)	 - Camy in your terminal — the same agent, memory, and cloud computer you run at camy.ai
+* [camy webhooks dead-letters](camy_webhooks_dead-letters.md)	 - Deliveries that ran out of retries — what replay takes
 * [camy webhooks deliveries](camy_webhooks_deliveries.md)	 - Delivery attempts, newest first
 * [camy webhooks replay](camy_webhooks_replay.md)	 - Re-enqueue a dead letter (fresh idempotency key)
 * [camy webhooks trigger](camy_webhooks_trigger.md)	 - Synchronous test delivery through the real path

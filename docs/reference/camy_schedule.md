@@ -10,7 +10,7 @@ camy schedule [flags]
 
 ```
 camy schedule                    every schedule and when it fires next
-camy schedule create "every weekday at 8, tell me what needs me"
+camy schedule create "08:00" --run "tell me what needs me"
 camy schedule pause sc_31c0      hold it without deleting it
 ```
 
@@ -42,7 +42,7 @@ camy schedule pause sc_31c0      hold it without deleting it
   -q, --quiet                     suppress non-data stderr
       --raw                       --json on a listing emits the endpoint's own envelope, not the normalised array
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
-      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe until 6 Oct 2026, then enforce where the OS can confine writes; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
 ```
@@ -53,6 +53,7 @@ camy schedule pause sc_31c0      hold it without deleting it
 * [camy schedule create](camy_schedule_create.md)	 - Fire an instruction on a schedule
 * [camy schedule delete](camy_schedule_delete.md)	 - Cancel a schedule
 * [camy schedule pause](camy_schedule_pause.md)	 - Pause a schedule
+* [camy schedule resume](camy_schedule_resume.md)	 - Resume a paused schedule
 * [camy schedule run-now](camy_schedule_run-now.md)	 - Fire a scheduled task now
 * [camy schedule update](camy_schedule_update.md)	 - Change a scheduled task's cron, timezone or delivery channels
 

@@ -18,7 +18,7 @@ camy status --watch              keep it live
 ```
   -h, --help    help for status
       --watch   refresh every 15s
-  -w, --web     open camy.ai instead
+  -w, --web     open For You at camy.ai instead
 ```
 
 ### Options inherited from parent commands
@@ -43,7 +43,7 @@ camy status --watch              keep it live
   -q, --quiet                     suppress non-data stderr
       --raw                       --json on a listing emits the endpoint's own envelope, not the normalised array
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
-      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe until 6 Oct 2026, then enforce where the OS can confine writes; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
 ```

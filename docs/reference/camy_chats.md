@@ -12,6 +12,7 @@ camy chats [flags]
 camy chats                       your chats, newest first
 camy chats show ch_0a4f          a transcript
 camy chats export ch_0a4f        portable markdown to stdout
+camy chats search "invoice"      every message that mentions it
 ```
 
 ### Options
@@ -42,7 +43,7 @@ camy chats export ch_0a4f        portable markdown to stdout
   -q, --quiet                     suppress non-data stderr
       --raw                       --json on a listing emits the endpoint's own envelope, not the normalised array
       --read-only                 local bridge reads only: no run_command/write_file this session (env CAMY_LOCAL_READONLY=1)
-      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe; env CAMY_LOCAL_SANDBOX)
+      --sandbox string            off|observe|enforce: OS write-confinement under run_command, this invocation only (default observe until 6 Oct 2026, then enforce where the OS can confine writes; env CAMY_LOCAL_SANDBOX)
       --template string           format --json output with a Go template
   -v, --verbose                   request ids + timings
 ```
@@ -53,5 +54,6 @@ camy chats export ch_0a4f        portable markdown to stdout
 * [camy chats export](camy_chats_export.md)	 - Portable markdown to stdout
 * [camy chats list](camy_chats_list.md)	 - Your chat sessions — newest first
 * [camy chats prune](camy_chats_prune.md)	 - Delete sessions with no messages (the current chat and agent chats are kept)
+* [camy chats search](camy_chats_search.md)	 - Find a message across your chats
 * [camy chats show](camy_chats_show.md)	 - Render a transcript
 

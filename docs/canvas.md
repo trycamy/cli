@@ -32,7 +32,7 @@ camy canvas --chat abc12345 files
 ```
 
 `--chat` accepts a full chat id, or a short id — anything four characters
-or longer that uniquely prefixes one of your chats.
+or longer that uniquely prefixes one of your chats, archived chats included.
 
 Leave it out and the CLI falls back to the chat you last used, the same
 anchor [`camy chat -c`](reference/camy_chat.md) continues. With no chat to
@@ -40,7 +40,9 @@ fall back to either, it exits 2 asking which chat's canvas you meant and
 points you at [`camy chats`](reference/camy_chats.md).
 
 A short id that matches nothing is passed straight through, and left to the
-server to reject. One that matches more than one chat is refused
+server to reject. The exception is `camy canvas open`, which only builds a
+link: it refuses a short id that matches none of your chats (exit 2) instead
+of opening an empty canvas. One that matches more than one chat is refused
 client-side (exit 2) rather than guessed at. A ref under four characters is
 refused outright as too short to identify a chat.
 
@@ -160,9 +162,14 @@ See [`camy canvas preview`](reference/camy_canvas_preview.md).
 camy canvas open
 ```
 
-Opens the real canvas at camy.ai in your browser — the web editor, not a
-local checkout. It prints the URL as well as opening it, so the link is
-still the output on a machine with no browser.
+Opens the chat's Code Canvas page at camy.ai in your browser — the real
+canvas in the web editor, not a local checkout. It prints the URL as well as
+opening it, so the link is still the output on a machine with no browser.
+
+`open` refuses a short id (anything shorter than a full chat id) that doesn't
+resolve to one of your chats. It exits 2 with `no chat matches <ref>` and a
+hint pointing at `camy chats`. A full chat id, including the last-chat
+fallback, is opened as given without being checked.
 
 See [`camy canvas open`](reference/camy_canvas_open.md).
 
@@ -258,10 +265,24 @@ See [`camy canvas sites rm`](reference/camy_canvas_sites_rm.md).
 camy canvas versions SITE
 ```
 
-Lists a site's archived publish versions, newest first, with each version's
-id and when it was created. With no archived versions — only the current
-live publish exists — it prints a note rather than an empty list. See
-[`camy canvas versions`](reference/camy_canvas_versions.md).
+Lists a site's archived publish versions, newest first: each version's name
+and, when the name is a date, how long ago it was archived. With no archived
+versions — only the current
+live publish exists — it prints a note rather than an empty list.
+
+A version is usually named by the UTC time it was archived, such as
+`20260920T100000Z`. That name is what
+[`camy canvas rollback`](#camy-canvas-rollback) takes, and the list ends by
+suggesting a rollback to the newest one.
+
+`--json` gives one object per version. `created_at` is only present when the
+version's name is a date:
+
+```json
+[{"version": "20260920T100000Z", "created_at": "2026-09-20T10:00:00Z"}]
+```
+
+See [`camy canvas versions`](reference/camy_canvas_versions.md).
 
 ### `camy canvas rollback`
 
@@ -275,7 +296,9 @@ leave `VERSION` off (the server picks "one back," not the CLI), or to a
 specific version if you name one from `camy canvas versions`. It asks for
 confirmation, worded around exactly what it's about to do.
 
-Human output confirms the site is now serving the older version. See
+Human output confirms the site is now serving the older version, and names
+it when the service reports which one it restored:
+`rolled SITE back to VERSION — the site serves that version`. See
 [`camy canvas rollback`](reference/camy_canvas_rollback.md).
 
 ## Custom domain
@@ -324,7 +347,10 @@ have to look like a failure.
 
 So read the result, not just whether the command exited cleanly: a genuine
 pass prints an "ok" line naming the verified domain, anything else prints a
-"not yet" line with the reason. See
+"not yet" line with the reason. Under it come the TXT record name and value
+the service still expects, and a `found` line with any TXT records DNS did
+return, so you can tell a record that hasn't appeared yet from one with the
+wrong value. See
 [`camy canvas domain verify`](reference/camy_canvas_domain_verify.md).
 
 ## Access control
@@ -486,8 +512,8 @@ overwrite a file unless you pass `--force`.
 
 ## `--json` output
 
-`snapshots`, `sites`, and `versions` emit the raw row array the server
-returned. `files`, `pull`, `sites rm`, and `export` emit a shape the CLI
+`snapshots` and `sites` emit the raw row array the server returned.
+`files`, `pull`, `sites rm`, `versions`, and `export` emit a shape the CLI
 builds, shown with each of those commands above.
 
 Everything else that takes `--json` emits the server's response object
@@ -514,6 +540,7 @@ itself, and `preview` is an interactive action, not a data command.
 | No `--chat`, and no last chat to fall back to | 2 |
 | A `--chat` or snapshot ref under four characters | 2 |
 | An ambiguous chat or snapshot prefix | 2 |
+| `open` given a short chat id that matches none of your chats | 2 |
 | A bad `MODE` or `FORMAT` | 2 |
 | A missing passcode, or one under six characters | 2 |
 | `domain set` given both `--clear` and a `DOMAIN`, or neither | 2 |
