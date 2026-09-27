@@ -20,9 +20,10 @@ camy inbox
 
 Lists mail across your connected accounts, one line per message: a mark
 for the triage verdict, a short id, the sender, the subject, and how long
-ago it arrived. With nothing to show it prints `inbox zero — nothing here`
-and exits 0; a filtered view with nothing in it says
-`nothing here — this view is filtered` instead.
+ago it arrived. For mail you sent, the sender column names who it went to
+instead (`to jordan@acme.com`). With nothing to show it prints
+`inbox zero — nothing here` and exits 0; a filtered view with nothing in
+it says `nothing here — this view is filtered` instead.
 
 The verdict is computed locally from whether the message is read and its
 classification — the list itself carries no separate verdict field:
@@ -38,9 +39,19 @@ unless `--needs-you` or `--tab` already narrows the list. Below the rows, a line
 go next. Both are part of stdout, alongside the rows, so a script that
 wants only the messages should use `--json`.
 
-Whenever the number of rows shown differs from your total unread count, a
-footer line states both figures and points at a larger `-L` or `--all`.
-That line is part of stdout too.
+When there's another page after the one shown, a footer says how many
+rows you're seeing out of how many the view holds, and how to get the
+rest:
+
+```text
+showing 60 of 3,342 · --all walks everything · next page: --cursor '…'
+```
+
+The total counts the same view you asked for: the whole inbox, your unread
+mail with `--unread`, what needs you with `--needs-you`, or the tab's own
+count with `--tab`. When no count covers the view (`--tab people --unread`,
+say), the footer gives the row count alone. The last page of a view has no
+footer. That line is part of stdout too.
 
 ### Flags
 
@@ -70,13 +81,14 @@ camy inbox show em_7f31
 camy inbox show em_7f31 em_2a0c
 ```
 
-Prints one message in full: the short id and subject, with the triage
-verdict at the right; then the sender, every recipient on `to`, `cc`, and
-`bcc` lines, the date received, and an attachment count if there are any;
-then the commands you can run on it (`reply`, `archive`, `mark-read`); then
-the AI summary and why-it-matters line when triage is available, and the
-body last. On a narrow terminal a long subject wraps under itself and the
-verdict takes its own line, so the header never runs past the edge.
+Prints one message in full: the short id and subject, with `unread` or
+`read` at the right (or the list's triage verdict, when camy.ai sends the
+message's classification); then the sender, every recipient on `to`, `cc`,
+and `bcc` lines, the date received, and an attachment count if there are
+any; then the commands you can run on it (`reply`, `archive`,
+`mark-read`); then the AI summary and why-it-matters line when triage is
+available, and the body last. On a narrow terminal a long subject wraps under itself and that
+word takes its own line, so the header never runs past the edge.
 Attachments open on the web, not from the CLI. Name several ids to get one
 message after another.
 
@@ -105,6 +117,8 @@ See [camy inbox show](reference/camy_inbox_show.md) and
 ```bash
 camy inbox mark-read em_7f31 em_a01c
 camy inbox archive em_7f31
+camy inbox trash em_7f31 em_2a0c
+camy inbox unread em_7f31
 camy inbox restore em_7f31
 ```
 
@@ -121,9 +135,46 @@ for an id that isn't one of your emails. That counts as a failure, never a
 (exit 1). The same goes for the mark `camy inbox read` makes after showing
 the message.
 
+`restore` finds a short id among the 1,000 most recently received
+messages in your archived mail and in your trash. When camy can read those
+folders, a short id none of them holds is refused before anything is sent:
+`no archived or trashed email matches em_7f31` (exit 2). A message received
+earlier than those needs its full id (`--json` on `archive` or `trash`
+prints it), even if you archived or trashed it a moment ago.
+
 See [camy inbox mark-read](reference/camy_inbox_mark-read.md),
 [camy inbox archive](reference/camy_inbox_archive.md), and
 [camy inbox restore](reference/camy_inbox_restore.md).
+
+### Moving mail to the trash
+
+```bash
+camy inbox trash em_7f31 em_2a0c
+```
+
+Moves each message to the trash and prints a line for each one that went
+(`✓ trashed — em_7f31`). The ✓ line means the message moved to the trash
+in Camy. camy.ai also tries to make the same change at your mail provider,
+but camy doesn't report whether that part worked. Trashing a message also
+marks it read. It follows the batch rules above and asks for no
+confirmation: `camy inbox restore` brings trashed mail back.
+
+See [camy inbox trash](reference/camy_inbox_trash.md).
+
+### Marking mail unread
+
+```bash
+camy inbox unread em_7f31 em_2a0c
+```
+
+The opposite of `mark-read`: marks each message unread and prints a line
+for each (`✓ unread — em_7f31`). The ✓ line means the message was marked
+unread in Camy. camy.ai also tries to make the same change at your mail
+provider, but camy doesn't report whether that part worked.
+`camy inbox mark-unread` is the same command. It follows the batch rules
+above.
+
+See [camy inbox unread](reference/camy_inbox_unread.md).
 
 ### Unsubscribing
 
@@ -166,10 +217,23 @@ camy inbox reply em_7f31 --body "sounds good" --send --at 2h
 - `--edit` needs a real terminal; in a headless session use `--body`
   instead.
 - The undo window is 30 seconds by default. The queued line prints the
-  real send time, and `camy inbox outbox` shows it too.
+  clock time it closes, with the date when that isn't today
+  (`✓ queued — sending at 10:04:30 · changed your mind? camy inbox undo …`),
+  and `camy inbox outbox` shows it too.
 - `--at` replaces that default window and requires `--send` — passing
   `--at` alone is a usage error. It also refuses anything that isn't
   strictly in the future.
+- Before a scheduled reply says `✓ queued for …`, camy checks the outbox,
+  but only when it can trust the answer: the send is due more than 30
+  seconds out, camy.ai answered with an outbox id, and the outbox can be
+  read and lists at least one queued send (and fewer than 200). If that id
+  isn't among them, the command fails instead:
+  `not queued — camy.ai answered with ob_31f2, which isn't waiting in the outbox`
+  (exit 1), with a hint to check `camy inbox outbox` before scheduling
+  again. Under `--json` the server's response still prints first. With
+  nothing else in the outbox, as after undoing your only queued reply,
+  camy can't tell and still prints `✓ queued for …`, so check
+  `camy inbox outbox` yourself.
 - Under `--json` with no `--send`, the draft path emits
   `{"draft": "…", "sent": false}`; with `--send` you get the server's
   outbox response instead.
@@ -242,6 +306,15 @@ rejected it, `camy inbox send` still exits non-zero — under `--json` the
 response body is printed first so you can see why, then the command exits
 1. A bounced send is never reported as sent, to a script or otherwise.
 
+A send can also fail in a way that leaves it unclear whether the mail
+left: camy.ai answers with a server error, or no answer comes back in time.
+Then camy doesn't tell you to just try again. The hint says
+`check your Sent folder before retrying — it may have gone out`, or for a
+scheduled send
+`check camy inbox outbox before retrying — it may already be queued`.
+Without `--provider` it adds
+`if it didn't, retry with --provider gmail|outlook`.
+
 See [camy inbox send](reference/camy_inbox_send.md).
 
 ### Snoozing
@@ -256,7 +329,15 @@ camy inbox unsnooze em_7f31
 timestamp — like every other `--at`/`--until` in this area, it refuses a
 value that isn't strictly in the future. A snoozed message resurfaces to
 the inbox automatically once the time passes; `unsnooze` brings it back
-immediately instead.
+immediately instead and says `✓ back in the inbox — em_7f31`.
+
+`unsnooze` looks a short id up among your snoozed mail (the newest 1,000),
+not in the inbox, and never sends one it couldn't find there. A short id
+that matches no snoozed email is a usage error
+(`no snoozed email matches em_7f31 — nothing to bring back`, exit 2). A
+full id goes through as typed, unless camy can tell from your snoozed mail
+that it isn't snoozed: then it fails with
+`em_7f31 isn't snoozed — nothing to bring back` (exit 1).
 
 See [camy inbox snooze](reference/camy_inbox_snooze.md) and
 [camy inbox unsnooze](reference/camy_inbox_unsnooze.md).
@@ -267,7 +348,9 @@ Every email id in this section accepts the typed short id `camy inbox`
 prints (`em_7f31`), a bare prefix of at least 4 characters of the full id,
 or the full id. A short id is looked up in your whole inbox, then your
 needs-you view, then your unread mail (the newest 200 of each), so a
-message that sits far down a large inbox still resolves.
+message that sits far down a large inbox still resolves. `restore` and
+`unsnooze` look where that mail lives instead: your archived mail and
+trash, or your snoozed mail (the newest 1,000 of each).
 
 - A prefix under 4 characters is refused outright.
 - A prefix matching nothing is passed through to the API, and the command
@@ -275,10 +358,11 @@ message that sits far down a large inbox still resolves.
 - A prefix matching more than one message is a usage error asking for a
   longer one. Resolution never guesses between candidates.
 
-Two verbs refuse a prefix that matches nothing instead of passing it on:
-`inbox show -w`, because the web page needs the full id, and `inbox undo`,
-which resolves outbox ids against `camy inbox outbox`. `inbox send`'s
-recipients are addresses, taken exactly as typed.
+Four verbs refuse a prefix that matches nothing instead of passing it on:
+`inbox show -w`, because the web page needs the full id; `inbox undo`,
+which resolves outbox ids against `camy inbox outbox`; `inbox unsnooze`;
+and `inbox restore`, whenever it can read your archived mail and trash.
+`inbox send`'s recipients are addresses, taken exactly as typed.
 
 ## The sweep dial
 
@@ -347,7 +431,9 @@ camy sweep restore 9f2c41ab --items gmail_18f2a9c0d1,gmail_18f2a9c0d2
 
 Brings a filed batch back to the inbox. `--items` restores only the listed
 items from that batch instead of the whole batch — the list is split on
-commas exactly as typed, so write the ids with no spaces between them.
+commas and each id trimmed, so `--items "a, b"` works. An `--items` that
+names no ids (`--items ""`) is a usage error (exit 2), never a whole-batch
+restore; drop the flag to restore the whole batch.
 The CLI reports how many came back
 (`✓ restored 26 emails — back in the inbox, sender remembered`). If
 nothing came back, because no such batch exists or everything in it is
@@ -456,7 +542,7 @@ widens the status filter but keeps the default page size of 40.
 | `inbox show`, `inbox read`, `feed show`, `sweep` | the full raw object for the one item requested |
 | `sweep review` | the server's whole review object, with the batches under a `batches` key |
 | `unsubscribe`, `reply`, `send`, `snooze`, `unsnooze`, `undo`, `sweep set`, `sweep restore`, `feed act`, `feed dismiss` | a small result object on success: either the server's own response, or a locally built `{"ok": true, ...}` for the few that construct their own confirmation |
-| `mark-read`, `archive`, `restore` | a locally built `{"ok": true, "email_id": "…", "action": "archive"}` |
+| `mark-read`, `unread`, `archive`, `trash`, `restore` | a locally built `{"ok": true, "email_id": "…", "action": "archive"}`, with the full email id |
 
 An empty list is `[]`, never `null`, for all three listings, so
 `jq '.[]'` is safe on an empty inbox. `--raw` swaps the array for the
@@ -464,9 +550,9 @@ server's own response object, which is where `next_cursor` lives for
 `--cursor`; with `--all` there is no single response to hand back, so the
 array stands.
 
-The verbs that take several ids (`inbox show`, `mark-read`, `archive`,
-`restore`, `undo`, `feed show`, `feed dismiss`) emit the object above when
-you name one id. Name several and you get an array with one object per id,
+The verbs that take several ids (`inbox show`, `mark-read`, `unread`,
+`archive`, `trash`, `restore`, `undo`, `feed show`, `feed dismiss`) emit
+the object above when you name one id. Name several and you get an array with one object per id,
 each carrying the `ref` you typed, `ok`, and an `error` when that id
 failed. A single id that fails emits that same per-id object before the
 command exits non-zero.

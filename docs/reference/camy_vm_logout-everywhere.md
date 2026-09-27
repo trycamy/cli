@@ -1,23 +1,45 @@
-## camy connectors review
+## camy vm logout-everywhere
 
-See what a server changed since you approved it, and approve the changes
+Log your computer out of every site: forget saved logins, clear its browser, stop its tasks
+
+### Synopsis
+
+Camy forgets every login it saved and clears your computer's browser (cookies and
+open sign-ins); any task running on the computer stops. The sites themselves aren't
+touched — you sign in again the next time a task needs one.
+
+It asks you to confirm (--yes skips that), then for a fresh check that it's you: your
+authenticator's code, or Enter for a code emailed to your account (--code passes the
+code up front, for scripts). It runs only with the key `camy auth login` gave this
+terminal (the browser sign-in or --code). Any other key (a pasted one, CAMY_API_KEY,
+one made on camy.ai) is refused (exit 3); so is a sign-in key from before camy.ai
+marked them, until `camy auth login` signs this terminal in again.
+
+Saved logins are gone when it answers. A running computer's browser is cleared right
+after; one that's off is cleared the next time it starts, before Camy uses it.
+--json prints the receipt: vault_entries_deleted, sessions_stopping, boxes_clearing,
+boxes_pending.
+
+Exit codes: 0 done · 1 camy.ai couldn't do it · 2 not confirmed / bad flags ·
+3 this key can't, or the code didn't confirm it's you.
 
 ```
-camy connectors review NAME [flags]
+camy vm logout-everywhere [flags]
 ```
 
 ### Examples
 
 ```
-  camy connectors review linear                # shows what changed, then asks
-  camy connectors review linear --yes --json   # approve without asking
+  camy vm logout-everywhere                        # asks, then asks for a code
+  camy vm logout-everywhere --yes --code 123456 --json
 ```
 
 ### Options
 
 ```
-  -h, --help   help for review
-      --yes    approve the changes without asking — --json and --no-input approve only with this or --force
+      --code string   your authenticator's code, or a code camy.ai emailed you (else it asks)
+  -h, --help          help for logout-everywhere
+      --yes           don't ask to confirm (scripts; --force does too)
 ```
 
 ### Options inherited from parent commands
@@ -49,5 +71,5 @@ camy connectors review NAME [flags]
 
 ### SEE ALSO
 
-* [camy connectors](camy_connectors.md)	 - Your connections — accounts, servers, and what each may do
+* [camy vm](camy_vm.md)	 - your cloud workspace — exec, shell, status
 

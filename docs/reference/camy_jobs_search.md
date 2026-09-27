@@ -18,6 +18,7 @@ camy jobs search QUERY... [flags]
 ```
   -h, --help            help for search
   -L, --limit int       page size (default 25) (default 25)
+      --offset int      skip this many jobs (the next page: --offset LIMIT)
       --status string   filter by status (active|suspended|blocked|completed|failed|cancelled|needs_attention)
 ```
 

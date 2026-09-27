@@ -1,6 +1,6 @@
 # Exit codes
 
-Every `camy` command ends with one of ten exit codes. [`camy vm exec`](reference/camy_vm_exec.md)
+Every `camy` command ends with one of eleven exit codes. [`camy vm exec`](reference/camy_vm_exec.md)
 is the one exception: it also mirrors your remote command's own 0-254 code.
 
 Scripts and CI should branch on the code, not on the wording of an error
@@ -27,8 +27,9 @@ camy help exit-codes   # the same table, from the binary
 | 4 | checkpoint pending — approve out of band, then re-attach | `checkpoint_pending` |
 | 5 | rate limited | `rate_limited` |
 | 6 | plan — payment required or a paid-tier feature | `plan` |
-| 7 | unavailable — workspace asleep with `--no-wake`, or the workspace terminal unreachable | `unavailable` |
+| 7 | unavailable — workspace asleep with `--no-wake`, a listing that won't wake it, or the workspace terminal unreachable | `unavailable` |
 | 8 | checkpoint denied — a human said no | `checkpoint_denied` |
+| 131 | quit — you pressed Ctrl-\\ (SIGQUIT, 128+3) | — |
 | 255 | `camy vm exec` only: camy's own failure | `runtime` |
 
 ## What each code means
@@ -143,12 +144,16 @@ line — and no `--json` error object — follows it.
 camy vm exec --no-wake -- pytest -q
 ```
 
-The thing the command needs isn't reachable right now. Two cases produce
+The thing the command needs isn't reachable right now. Three cases produce
 this today:
 
 - `camy vm exec --no-wake` against a stopped or sleeping workspace: it
   refuses to spend a multi-minute wake-up silently. See
   [Workspace](workspace.md).
+- A read that will not wake a stopped workspace on its own: `camy vm apps`,
+  `camy canvas sites`, `camy canvas versions` and `camy canvas rollback`
+  exit 7 and point at [`camy vm start`](reference/camy_vm_start.md) instead
+  of booting the workspace to answer. See [Canvas](canvas.md).
 - [`camy vm shell`](reference/camy_vm_shell.md) when the workspace terminal
   socket won't open or won't complete its handshake. Check
   [`camy vm status`](reference/camy_vm_status.md), then
@@ -177,6 +182,14 @@ Three refusals that do not exit 8:
 
 `camy chat attach` is blunter: any rejection during the turn it re-joined
 exits 8.
+
+### 131 — quit
+
+Ctrl-\\ sends SIGQUIT. Without a handler, the Go runtime would answer it by
+dumping every goroutine to stderr and exiting 2; camy exits 131 instead,
+the shell's 128+signal convention, and prints no dump.
+Set `CAMY_DEBUG_DUMP=1` to keep the dump when you are reporting a hang.
+There is no JSON error object for 131: the process was told to quit.
 
 ### 255 — camy vm exec's own failure
 

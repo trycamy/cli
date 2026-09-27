@@ -62,11 +62,13 @@ camy inbox reply em_7f31         the grounded draft; --send queues it with an un
 * [camy inbox outbox](camy_inbox_outbox.md)	 - Queued sends still inside their undo window
 * [camy inbox read](camy_inbox_read.md)	 - Show the email, then mark it read
 * [camy inbox reply](camy_inbox_reply.md)	 - Print the grounded draft; --send queues it with an undo window
-* [camy inbox restore](camy_inbox_restore.md)	 - Bring it back to the inbox
+* [camy inbox restore](camy_inbox_restore.md)	 - Bring archived or trashed mail back to the inbox
 * [camy inbox send](camy_inbox_send.md)	 - Compose and send a brand-new email — synchronous, no outbox, no undo
 * [camy inbox show](camy_inbox_show.md)	 - One email with its triage
 * [camy inbox snooze](camy_inbox_snooze.md)	 - Hide it until later — resurfaces to the inbox automatically
+* [camy inbox trash](camy_inbox_trash.md)	 - Move to the trash (provider write-through; restore brings it back)
 * [camy inbox undo](camy_inbox_undo.md)	 - Pull a queued send back before it leaves
+* [camy inbox unread](camy_inbox_unread.md)	 - Mark unread (provider write-through)
 * [camy inbox unsnooze](camy_inbox_unsnooze.md)	 - Bring a snoozed email back now
 * [camy inbox unsubscribe](camy_inbox_unsubscribe.md)	 - Act on the email's List-Unsubscribe — one-click/mailto run server-side, link prints the URL
 

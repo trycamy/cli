@@ -19,6 +19,7 @@ camy chats search QUERY... [flags]
       --chat string   search one conversation (a short id works)
   -h, --help          help for search
   -L, --limit int     page size (default 25, best matches first) (default 25)
+      --offset int    skip this many matches (the next page: --offset LIMIT)
 ```
 
 ### Options inherited from parent commands

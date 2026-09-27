@@ -26,7 +26,7 @@ No `sudo` is used at any step. The script, in order:
    in `CAMY_VERSION`, or the current version from that base's `VERSION`
    file. A `VERSION` older than the previous release is refused, so a
    rolled-back mirror can't steer a fresh install onto an old build: the
-   installer published with 1.0.4 refuses anything older than 1.0.3. A
+   installer published with 1.0.5 refuses anything older than 1.0.4. A
    `CAMY_VERSION` pin is your own choice and skips that check.
 2. **Detects your platform.** OS (`darwin` or `linux`) and architecture
    (`arm64` or `amd64`, with `aarch64` and `x86_64` accepted as aliases).

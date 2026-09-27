@@ -36,6 +36,25 @@ is there to answer them.
 
 Each trace closes on its own line with what came back — `✓ 4 emails · 0.6s`, `✗ exit 1 · 0.4s`, `! awaiting approval` — so a turn reads as a ledger of what ran and what it found.
 
+An action you approved closes on what really happened: `✗ failed` when it
+didn't run and `✗ exit N` when its command failed, never a ✓. When camy.ai
+sends the last lines of the command's output, up to 12 of them print
+beneath the trace.
+
+Your answer to a card counts once camy.ai takes it. If the card was already
+settled somewhere else, say approved on the web a moment before you typed
+`n`, camy prints camy.ai's account of what happened and the turn keeps
+streaming instead of ending on an error.
+
+Other things the web shows along the way get one line each on stderr: a
+turn waiting for a free slot
+(`queued — 2 of 2 turns already running; this one starts when one finishes`),
+a reply the safety check flagged, earlier messages summarized to make room,
+a Camy computer working on the turn (with a link to watch it live), and a
+card that expired before anyone answered
+(`… expired before anyone answered — nothing ran`). The agent's routine
+progress notes show only with `--verbose`.
+
 **stdout is the reply, stderr is everything else.** The reply text (or, in
 JSON mode, the NDJSON event stream — see
 [below](#machine-output---json-and-ndjson)) is the only thing camy writes to
@@ -81,9 +100,14 @@ When the turn ends, camy exits with a code describing how it ended:
 |---|---|
 | 0 | The turn completed normally. |
 | 1 | A runtime failure — an error in the turn itself, a dropped connection, or the turn was stopped or detached after Ctrl-C. |
+| 2 | Any usage error before the message is sent. Examples: nothing to say, an unknown `--tier`, `--temp` with `-c`/`--chat`, an `--attach` file that can't be read, a `--chat` id that is too short or ambiguous, or a message too large to send (see [stdin as context](#stdin-as-context)). |
+| 3 | camy.ai refused your key. When the refusal is ambiguous, camy checks the key once more first, and a key that still works ends on 7 instead. |
 | 4 | A checkpoint needed approval and camy couldn't prompt for it (headless, `--no-input`, no controlling terminal, or `--json`) — or you pressed Ctrl-C while a prompt was open. See [Approvals](approvals.md). |
-| 6 | The turn ended on a plan or credit limit. |
+| 5 | Any rate limit: sending messages too fast, too many connections for your account or from your network, too many turns at once, or a rate-limited request before the turn starts (creating the chat, uploading an attachment). Each comes with a hint on when to try again. |
+| 6 | The turn ended on a plan or credit limit, including a turn held until you add credits (see [below](#an-interrupted-turn-offered-back)). |
+| 7 | camy.ai was unavailable: its chat service was down, it was restarting and camy's resend gave up, or it couldn't check your key just then. |
 | 8 | An approval was rejected and nothing happened after it — a turn the agent kept going after a rejection and still produced something does not exit 8. |
+| 131 | You pressed `Ctrl-\` (SIGQUIT). |
 
 The full, command-independent table lives in [Exit codes](exit-codes.md).
 
@@ -99,6 +123,13 @@ When a turn stops on an approval camy can't prompt for, there is no
 trailer. camy exits 4 and prints the checkpoint id, with
 `camy approvals approve <id>` as the hint. A `--temp` chat can't hold an
 approval, so it exits 4 without an id.
+
+Press Ctrl-C while a reply streams and camy gives you two seconds to press
+it again. A second Ctrl-C stops the turn; otherwise camy lets go of the
+turn and leaves it running on camy.ai. For a saved chat, `camy chat attach`
+can rejoin a turn you let go of. A `--temp` turn you let go of keeps
+running on camy.ai too, but nothing can rejoin it, so press Ctrl-C twice to
+stop it. Either way camy exits 1.
 
 A turn stopped from somewhere else, such as the web's stop button or
 another device, keeps whatever reply had already streamed, prints
@@ -136,7 +167,11 @@ camy chat --temp "just testing something, don't save this"
 
 `--temp` starts a throwaway chat: nothing is persisted server-side, it
 never appears in `camy chats`, and it can't be resumed with `-c` or
-`--chat`. It is mutually exclusive with both of them.
+`--chat`. It is mutually exclusive with both of them. It never uploads a
+file on its own either: only one you name with `--attach` goes up. Its
+second Ctrl-C stops the turn like any other chat's. A `--temp` turn you let
+go of after one Ctrl-C keeps running on camy.ai, but nothing can rejoin it,
+so press Ctrl-C twice to stop it.
 
 A temporary chat also can't hold an approval. If a tool call in a `--temp`
 turn needs your sign-off and camy can't prompt for it right then, the turn
@@ -157,6 +192,30 @@ words; if you didn't, the piped content becomes the whole message.
 Either way, stdout stays reserved for the reply, and the piped block is
 never echoed back: with a typed message the chrome echoes just your
 message, and a bare pipe with no message shows `(piped input)` instead.
+
+A pipe that stays silent never holds a chat up. A pipe is read only if
+something arrives on it within 200 ms, or within two seconds when the pipe
+is the whole message (`git diff | camy chat`); otherwise camy treats it as
+empty and goes on. So a script that runs `camy chat "…"` with an open,
+silent stdin doesn't hang. A file redirected in (`< notes.txt`), or a pipe
+once data arrives, is read up to the 2MB cap, and camy waits for the pipe
+to close (or for 2MB) before it sends.
+
+camy.ai takes a message of a little under 64 KB once it's encoded for
+sending. camy measures the encoded message, not the raw text. When a piped
+block pushes the message past that, camy uploads the block as an attachment named
+`stdin.txt` and sends your typed words with it (a bare pipe sends the
+attachment alone), and says so on stderr:
+
+```text
+· stdin is over 64 KB — attached as stdin.txt (310.4 KB)
+```
+
+A `--temp` chat never uploads on its own, so there a piped block that large
+is a usage error (exit 2): trim it, or `--attach` a file to send it
+explicitly. A message you typed that is itself too long is a usage error
+too, before the message is sent: save it to a file and send it with
+`--attach`.
 
 For text that might start with a dash or otherwise look like a flag, `--`
 marks the end of flags so the rest is passed through literally — the
@@ -179,11 +238,14 @@ Each file is uploaded before the turn starts, up to 50MB each. camy doesn't
 check the file's type on your end, only that it can be opened and that the
 upload comes back with an id — what the agent can actually do with the
 content is up to the server. In practice that means images, PDFs, audio,
-and video: the kinds the agent can read.
+video, text files (plain, Markdown, CSV), JSON, XML and RTF, and Office
+documents, whose text the agent reads.
 
 An unreadable path or a failed upload stops the send before any turn is
 created, so a message never goes out silently missing what you meant to
-attach.
+attach. If camy.ai then takes fewer files than were sent, camy says so on
+stderr (`1 of 2 attachments didn't reach the agent — an expired or unknown upload`),
+or with a `warning` event under `--json`.
 
 This is a different "attach" from
 [`camy chat attach`](#reattaching-to-a-paused-turn): this one attaches a
@@ -232,13 +294,31 @@ the turn id you expect, the chat's live turn is what actually gets
 attached, and camy says so on stderr when the live turn isn't the one you
 named, rather than silently attaching a different one.
 
+If nothing is running, the turn you came back for has usually just
+finished, so `camy chat attach` prints the chat's latest reply, read back
+from the transcript, under `nothing running — the chat's latest reply`
+and how long ago it was sent. Under `--json` it arrives as a `last_reply`
+event. When the chat's newest message has no reply yet, it says
+`nothing running — this chat is idle`.
+
+You rarely need `attach` for a blip. If camy has to reconnect while a reply
+is streaming (in any chat but a `--temp` one), it catches up on the turn and
+prints only the part of the reply you missed, once. In a terminal, when it
+can't line the two up, it says so instead of guessing:
+`the connection dropped and came back — some of this reply may be missing here; camy chats show <id> has all of it`.
+In the full-screen app and the accessible REPL the note points at the
+chat's history instead (`the chat's history has all of it`). Under `--json`
+camy emits no event for the gap, so the `token` text may be missing a
+piece.
+
 Full flag reference: [camy chat attach](reference/camy_chat_attach.md).
 
 ## An interrupted turn, offered back
 
-If an earlier turn in this chat died partway through and camy.ai is still
-holding it, camy offers it back once the current turn is over, never in the
-middle of a reply. The offer is drawn as an approval-style card headed
+camy.ai can hold a turn in this chat, either one that broke partway
+through or one it paused at a limit, including the turn you just sent. camy
+offers it back once the current turn is over, never in the middle of a
+reply. The offer is drawn as an approval-style card headed
 `INTERRUPTED`: what you originally asked, the step it stopped on, and how
 long the hold has left (`held 28 minutes`), each shown only when the server
 says so. The step it stopped on is shown only when no step is unsure.
@@ -259,10 +339,20 @@ such step, and the question becomes `[resume/fresh]`: `resume` picks the
 turn back up with the unsure step skipped, `fresh` clears the hold, and
 Enter keeps it held.
 
+Not every held turn broke. The heading reads `PAUSED — …` only for a
+limit: `PAUSED — reached its cost ceiling` for a turn that hit its own cost
+ceiling, `PAUSED — reached a limit` for any other limit, with the same
+question. A crash keeps `INTERRUPTED`. A turn held because your account
+ran out of credits is different, since resuming would run into the same wall: camy
+asks nothing and draws a `NOT ENOUGH CREDITS` card with what you asked, how
+long it's held, and `add credits, then say continue`, pointing at
+`camy.ai/p/plan`. `camy chat` then exits 6.
+
 This happens in `camy chat`, the full-screen app, and the accessible REPL.
 Headless and `--no-input` turns are never asked, and in `--json` mode the
-offer arrives as a `resume_offer` event (`chat_id`, `unsure`, and
-`held_until` when the hold's end is known) instead of a question.
+offer arrives as a `resume_offer` event (`chat_id`, `unsure`, `held_until`
+when the hold's end is known, and `stop_reason` and `ceiling_axis` when
+camy.ai says why it held the turn) instead of a question.
 
 ## Past chats: list, search, show, export
 
@@ -297,6 +387,7 @@ clutter the reading with.
 camy chats search "invoice"
 camy chats search "invoice" --chat ch_0a4f
 camy chats search invoice march -L 50
+camy chats search invoice --offset 25
 ```
 
 `camy chats search` finds messages across every chat you have, archived
@@ -304,7 +395,7 @@ ones included. Every word after `search` is part of the query, so quotes
 are optional.
 
 The first line counts the hits on this page (`3 matches in 2 chats`).
-Raise `-L` (up to 100) to see more. Hits are
+Raise `-L` (up to 100), or page on with `--offset`, to see more. Hits are
 grouped under their chat in the order the server ranked them: each group
 opens with the chat's short id and title (with `- archived` after it for
 an archived chat), then one row per matching message — `you` or `camy`, a
@@ -319,14 +410,21 @@ points at `camy chats show` and
   `camy chat --chat` does.
 - `-L`/`--limit` sets the page size: 1 to 100, 25 by default, best
   matches first.
-- The query is capped at 100 characters. An empty query, a longer one, or
-  a `-L` outside 1 to 100 is a usage error (exit 2) before anything is
-  sent.
+- `--offset N` skips the first N matches, so `--offset 25` is the second
+  page of 25.
+- The query is capped at 100 characters. An empty query, a longer one, a
+  `-L` outside 1 to 100, or a negative `--offset` is a usage error (exit 2)
+  before anything is sent.
 
-With no hits it prints `nothing matched "invoice"`. If the server ranked
-only the newest 500 matches, a line under the results says older ones may
-be missing, so a cut-short list never reads as complete. Search is capped
-at 30 requests a minute; past that the command exits 5 (rate limited).
+When a page comes back full, a line under it says more may match and names
+the next page's flag
+(`more may match than this page shows — --offset 25 for the next page`).
+With no hits it prints `nothing matched "invoice"`; an empty page past the
+first says `no more matches for "invoice" past offset 25` instead. If the
+server ranked only the newest 500 matches, a line under the results says
+older ones may be missing, so a cut-short list never reads as complete.
+Search is capped at 30 requests a minute; past that the command exits 5
+(rate limited).
 
 Under `--json` you get the server's whole response object rather than a
 bare array, including `candidates_truncated`, which says whether older
@@ -384,6 +482,10 @@ full-screen app: a persistent session that stays open across many turns
 instead of exiting after one. It keeps one connection alive for as long as
 you leave it running, so an approval answered from another terminal or the
 web while you're idle still shows up here without you having to reconnect.
+If that connection drops, the app heals it in place, and the dot at the end
+of the key bar says whether it's live. Once camy.ai refuses your key, the
+app stops trying: the dot stays dead, and the next message you send shows
+the sign-in error.
 
 Replies render through the same markdown pipeline as `camy chats show` —
 headings, code blocks, and emphasis draw as formatted text, not raw
@@ -426,7 +528,7 @@ of those keys and every slash command.
 | `/new` | Starts a fresh chat; the old one stays in `/chats`. |
 | `/chats` | Opens a picker over your chats, with archived ones left out; `/chat ID` switches straight to one by its short id, archived or not. |
 | `/plan` | The agent's checklist for this turn, as a pane; the status row counts it (`3 of 5 done · /plan`). |
-| `/queue` | What is waiting to send when this turn ends. Enter steers the chosen message into the running turn now (`steered:`); it leaves the queue only once the turn has taken it, and otherwise goes next (`next:`). `d` drops it. |
+| `/queue` | What is waiting to send when this turn ends. Enter steers the chosen message into the running turn now (`steered:`); it leaves the queue once the turn has taken it, or once the chat has saved it without this turn taking it in (`saved to the chat:`, never sent again), and otherwise goes next (`next:`). `d` drops it. |
 | `/usage` | Your plan and credits — the same pane as `camy plan`. Credits never appear on the status row. |
 | `/help` | Keys and commands (also `?` or F1). |
 | `/<verb>` | Any read-only camy verb — `/feed`, `/tasks`, `/canvas`, `/doctor`, `/schedule` … — runs through the same renderer into the transcript. |
@@ -495,7 +597,9 @@ or `quick` it persists the choice. The full-screen app's and the REPL's
 `/mode` slash command read and write the exact same persisted setting.
 
 `camy chat --tier agent|quick` overrides the persisted mode for one turn
-only, without changing what's saved. The server may still choose
+only, without changing what's saved. Any other value is a usage error
+(exit 2) before anything is sent; case and surrounding spaces don't matter.
+The server may still choose
 differently than what you asked for. The tier actually used is reported
 back as part of the streamed turn — the `start` event's `tier` field in
 `--json` mode — so a script checking a specific tier should read it from
@@ -561,15 +665,25 @@ the stream itself; pipe the NDJSON to `jq` for that, as in the example
 above.
 
 The event types are `start`, `token`, `tool_call`, `collection`,
-`snapshot`, `checkpoint`, `retry`, `resume_offer`, `final`, `done`, and
-`error`. A `retry` event means the model restarted its answer: its
-`dropped_chars` says how many characters of the `token` text already sent
-are void. Frames with no dedicated event type of their own —
+`snapshot`, `checkpoint`, `checkpoint_replayed`, `retry`, `resume_offer`,
+`last_reply`, `warning`, `final`, `done`, and `error`. A `retry` event
+means the model restarted its answer: its `dropped_chars` says how many
+characters of the `token` text already sent are void. An `error` event
+usually ends the stream, but after a failed attach or a restarting server
+camy can retry and keep streaming, so read the last event and `$?`, not the
+first `error` event. An `error` event's `code` is never empty (`turn_error`
+when the turn itself failed). Frames with no dedicated event type of their own —
 `response_envelope`, `chain_progress`, `plan_updated`, and anything new the
-server adds — pass through as `{"type": "<frame type>", "data": {…}}`.
-Keepalive frames never appear in the stream, and a `checkpoint_resolved`
-frame passes through only for the card this turn is about, so an approval
-resolving in another chat never reads as an event of this turn. [Scripting with
+server adds — pass through as `{"type": "<frame type>", "data": {…}}` when
+they name this turn's chat. Another chat's frames never pass through, and
+neither do account-wide notices or keepalive frames. Frames that name no
+chat pass only when camy can tie them to this turn: a card this turn is
+about (`checkpoint_resolved`, `action_confirmed`, `action_timeout`), so an
+approval resolving in another chat, or the backlog a fresh connection
+replays, never reads as an event of this turn; a Camy computer session this
+turn met (`computer_session_update`, `computer_session_resumed`); or one
+of the turn's own notices (`turn_queued`, `agent_notification`, `guardrail_warning`,
+`context_compacted`, `message_sent`, `session_handoff_offer`). [Scripting with
 camy](scripting.md) has the field-by-field table, the full stdout/stderr
 contract, `--jq`/`--template`, and the frozen exit-code table shared across
 every command.

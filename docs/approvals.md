@@ -23,7 +23,8 @@ A checkpoint pauses one of four kinds of thing:
 
 - an **approval** — a plain yes/no, most often a local command or file write
 - a **question** — free text
-- a **choice** — pick one or more from a list, or type your own answer
+- a **choice** — pick from a list (one or several, depending on the card),
+  or type your own answer when the card allows it
 - a **form** — a few fields, filled in one at a time
 
 Nothing runs on a timeout. A checkpoint nobody decides is never approved and
@@ -73,10 +74,29 @@ range, and the list ends in the verbs that apply to its rows.
 With nothing pending it prints "no approvals waiting — the leash is slack"
 and exits 0.
 
+An approval you already gave can stay on camy.ai's list while its tool
+runs. Nothing is left to decide on it, so the list leaves it out and its
+header counts it instead (`1 approved, still running`); when nothing else is
+pending, the empty list says so. camy.ai sends at most 200 decisions
+at once. When the list comes back full, the count in its header carries a
+`+` (`200+ waiting`), and a note under the list says more may be waiting and
+that `camy approvals --web` has every one.
+
 The list also shows other decisions waiting on you that are not
 checkpoints, such as a card or an agent run asking to go ahead. They sit
 under NEEDS AN ANSWER with `—` where the id would be, because `show`,
 `approve`, `deny`, and `answer` act only on checkpoints.
+
+A checkout hold, the card Camy raises before it pays on a site
+("Camy needs your OK before paying"), names the amount and the merchant
+in its row's detail when camy.ai sends them. The amount comes first, so a
+column cut short loses the merchant name before the amount:
+
+```text
+49.99 USD · Acme (acme.com)
+```
+
+Two holds with different totals never collapse into one row.
 
 `--web` opens For You at camy.ai, where approvals wait, in your browser
 instead of printing the list.
@@ -108,22 +128,70 @@ command then exits on the worst code any of them produced.
 [`answer`](reference/camy_approvals_answer.md) takes exactly one id plus one
 or more words of free text, joined with spaces and sent as the answer.
 
-There is no flag for picking a numbered choice or filling structured form
-fields from the command line; that richer interaction happens only in the
-live [approval card](#the-approval-card). Answering a choice checkpoint with
-`camy approvals answer ID 2` sends the literal text `"2"`, not a pick of
-option 2.
+On a choice checkpoint, `answer` reads your text against the card's
+options. A number (`2`, or `1,3` on a card that takes several), an option's
+id, or its label, in any case, is sent as that pick. Other text is sent as a
+free-text answer, but only when the card takes one. A number that isn't one
+of the options, two picks on a card that takes one, or free text on a card
+that takes none exits 2 before anything is sent, and the error lists the
+options:
 
-`approve`, `deny`, and `answer` exit 1 with camy.ai's reason, and print no
-success line, when camy.ai turns the response down: an answer that didn't
-take, or a write that didn't run. When the response was recorded but the
-paused turn couldn't be restarted, the success line stands and a warning
-follows it on stderr.
+```bash
+camy approvals answer ap_789a 2
+```
+
+You fill a form's fields one at a time on the
+[approval card](#the-approval-card): live in a turn, or opened from the
+full-screen app's `/approvals` picker. `camy approvals answer` sends your
+text as a single answer.
+
+`approve` acts only on a checkpoint that asks for a yes or no. On one that
+wants an answer, including an agent's question that camy.ai lists as an
+approval, it exits 2 and points you at `answer`. An agent run's escalation is
+decided on camy.ai, not from here: `approve` and `deny` exit 2 before sending
+anything and point you at For You, and `show` offers `camy approvals --web`
+in place of the verbs. When `approve` or `deny` meets a checkpoint that
+stands for another kind of decision, such as a phone action, and camy.ai
+can't decide it from here, it exits 1 with the same pointer; nothing was
+decided.
+
+`approve`, `deny`, and `answer` print a success line only when camy.ai took
+the decision. Otherwise they print what actually happened, with no success
+line, and exit 1: for `approve` and `answer`, the checkpoint had already
+expired or been cancelled; someone had already denied, answered, or approved
+it, in the app, on the web, or in another terminal, so yours changed
+nothing; or it was approved but the write it released didn't run. A
+decision that lost the race to another surface says so on stderr:
+
+```text
+camy: that checkpoint was already decided somewhere else — your approval changed nothing
+      camy approvals lists what's still waiting
+```
+
+Denying a checkpoint that had already expired or been cancelled still
+succeeds, since nothing runs either way. When the checkpoint still waits on
+an approval, the command exits 4 and names the checkpoint it waits on when
+camy.ai says which, the same handle a fail-closed turn gives. When the
+response was recorded but the paused turn couldn't be restarted, the success
+line stands and a warning follows it on stderr.
+
+`approve` prints `✓ approved ap_789a — the turn resumes` only when a paused
+turn continues, and `✓ approved ap_789a` otherwise, such as for a connector
+write. `deny` prints
+`○ rejected ap_789a — nothing happens; the agent moves on`, shortened to
+`— nothing happens` when no paused turn continues.
+
+The full-screen app's [`/approvals` picker](chat.md#slash-commands) reads
+camy.ai's answer the same way. A question there gets an answer box, never a
+yes, and a bulk approve skips questions and says so. A checkpoint settled
+somewhere else leaves the list with camy.ai's account as its note, and one
+camy.ai still holds open stays.
 
 `camy approvals deny` always exits 0 on success: it succeeded at telling the
 agent no. Exit code 8 (checkpoint denied) is a different signal — within the
-approvals surface it comes only from a live turn whose own interactive
-prompt was answered no. See [Exit codes](exit-codes.md) for every command
+approvals surface it comes only from a live turn whose approval card was
+denied: answered no at its own prompt, or denied somewhere else while that
+prompt was up. See [Exit codes](exit-codes.md) for every command
 that can return 8.
 
 ## Streaming with `--wait`
@@ -140,11 +208,15 @@ terminal, instead of just confirming the checkpoint was cleared. `--wait`
 follows one turn, so `approve --wait` takes a single id; naming several is a
 usage error (exit 2).
 
-`--wait` attaches to the chat named by `--chat ID`, or, without it, to the
-last chat you were in on this profile. It does not read the chat id off the
-checkpoint, so pass `--chat` when the checkpoint belongs to some other chat.
-With neither available, it prints a note and exits 0 without streaming
-anything.
+`--wait` attaches to the chat named by `--chat ID`. Without it, it attaches
+to the chat the checkpoint belongs to (for a delegated agent's checkpoint,
+the chat that delegated it), and when camy can't read that, to the last chat
+you were in on this profile. With none available, it prints a note and exits
+0 without streaming anything.
+
+An approval that continues no paused turn, such as a connector write, has
+nothing to stream: `approve --wait` prints
+`nothing to stream — this decision doesn't resume a turn` and exits 0.
 
 Attaching takes a moment. The resume is spawned on the server
 asynchronously, so the CLI waits up to 120 seconds before it trusts that the
@@ -214,7 +286,7 @@ What answers it depends on the kind:
 | Approval, a local `run_command` card | `y run · N deny · a always · o web` | as above, plus `a` — see below. |
 | Approval, a connector write | `approve? [y/N/a(lways for this tool)/o(pen web)]` | as above, plus `a`: it approves and tells Camy to stop asking before that tool runs in that connection, which you can undo in Connections. A destructive tool's card doesn't offer `a`, and a typed `a` there denies. |
 | Question | `answer (empty rejects):` | anything typed answers; nothing typed rejects. |
-| Choice | `pick (1 or 1,3) or type — empty rejects:` | a number or comma-separated numbers picks by position; anything else is sent as free text; nothing typed rejects. |
+| Choice | `pick (1 or 1,3) or type — empty rejects:` | a number or comma-separated numbers picks by position, and an option's id or label picks it too; other text is sent as free text; nothing typed rejects. The prompt offers only what the card takes: `pick (1)` on a card that takes one pick, and no `or type` on one that takes no free text. A number that isn't an option, two picks on a one-pick card, or text the card can't take is refused with the options listed, and the card asks again. |
 | Form | one prompt per field | a required field re-prompts if left blank; an optional field may be left blank. |
 
 Prompts read `/dev/tty` directly, never stdin — piping input at a
@@ -222,6 +294,16 @@ Prompts read `/dev/tty` directly, never stdin — piping input at a
 never answer a checkpoint, by design. Every piece of server text shown on a
 card — the summary, choice labels, field descriptions — is sanitized before
 it reaches your terminal.
+
+Your answer is judged by what camy.ai says came of it. The `✓` line appears
+only for an answer camy.ai took, and says `— the turn resumes` only when a
+paused turn does. When the checkpoint was settled somewhere else while its
+card was up, for example approved on the web before you typed `n`, camy
+prints camy.ai's account instead and the turn keeps streaming:
+
+```text
+too late — it was already approved and is running; your denial changed nothing
+```
 
 ### `a` on a local command card
 
@@ -330,7 +412,7 @@ never enough on its own.
 
 A JSON array, one object per pending checkpoint or other decision, with
 repeats never collapsed. The shape is deliberately scrubbed — it drops the
-server's internal replay data — and carries exactly these fields:
+server's internal replay data — and carries these fields:
 
 ```json
 {
@@ -358,6 +440,18 @@ checkpoint's `family` is `"checkpoint"` and its `subject_id` is its
 `expires_at` are filled from the decision. The checkpoint verbs can't act on
 it, so filter on `family` before piping `checkpoint_id` into `approve`.
 
+`status` is `pending` for a checkpoint still waiting on you, or `executing`
+for an approval already given whose tool is still running; the human list
+leaves executing rows out. A checkout hold's row also carries `merchant` and
+`amount` when camy.ai sends them, and no other row has either key:
+
+```json
+{
+  "merchant": "Acme (acme.com)",
+  "amount": {"value": "49.99", "currency": "USD"}
+}
+```
+
 ### `camy approvals show ID --json`
 
 The full, unfiltered server row for that one checkpoint. It is not the same
@@ -382,6 +476,12 @@ also carries `resume_state` and camy.ai's `message` whenever camy.ai reports
 one: `"pending"` when the turn is resuming, `"unconfirmed"` when the
 response was recorded but the turn couldn't be restarted. Only
 `"unconfirmed"` prints the warning on stderr in human mode.
+
+When camy.ai reports them, the object also carries `status`, the state
+camy.ai settled the checkpoint in, and `resumed`, whether a paused turn
+continues; `resumed` is false for a decision that continues no turn, such
+as a connector write. `already_resolved: true` means another surface had
+decided it first.
 
 With two or more ids, `approve`, `deny`, and `show` print an array instead,
 one object per id, each with the `ref` you typed, the full `id` when it
@@ -412,6 +512,42 @@ Any other terminal outcome prints this instead:
 `expired`, or `cancelled`. `checkpoint_uncorrelated` is a fifth code in the
 same object shape, but it isn't an outcome — it means `--wait` gave up
 without ever being able to tell which result, if any, was this approval's.
+
+An approval that continues no paused turn prints one object and stops,
+without attaching:
+
+```json
+{"type": "done", "checkpoint_id": "a1b2c3d4...", "status": "approved", "resumed": false}
+```
+
+### The `checkpoint` event
+
+When a turn under `--json` pauses on a checkpoint, in a
+[`camy chat`](reference/camy_chat.md) turn or one that `--wait` streams, the
+`checkpoint` event carries what a script needs to decide without a second
+`camy approvals show`:
+
+```json
+{"type": "checkpoint", "id": "...", "kind": "approval", "summary": "...", "tool_name": "vm_exec", "risk_level": "high", "prompt": "...", "description": "Run: npm test", "expires_at": "2026-09-26T17:33:51Z"}
+```
+
+Every key above is always present, as a string that may be empty.
+`description` is the command or the arguments you'd be approving. A choice
+checkpoint adds `choices` (`[{id, label, description}]`), and a form adds
+`fields` (`[{key, title, type, required}]`, with `description` and `enum`
+when a field has them). Anything that looks like a secret is redacted from
+the event's text.
+
+A card camy.ai replays whose status is no longer `pending`, such as an
+approval already given whose tool is still running, is never drawn and
+never exits 4. The stream reports it once, and only for a card this process
+didn't answer itself:
+
+```json
+{"type": "checkpoint_replayed", "id": "...", "status": "executing"}
+```
+
+`executing` means the tool hasn't finished; attach again for its outcome.
 
 ## See also
 

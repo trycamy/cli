@@ -52,6 +52,7 @@ camy vm shell                    a live shell
 * [camy](camy.md)	 - Camy in your terminal — the same agent, memory, and cloud computer you run at camy.ai
 * [camy vm apps](camy_vm_apps.md)	 - What's running inside the workspace
 * [camy vm exec](camy_vm_exec.md)	 - Run a command on your workspace — the remote exit code becomes your exit code
+* [camy vm logout-everywhere](camy_vm_logout-everywhere.md)	 - Log your computer out of every site: forget saved logins, clear its browser, stop its tasks
 * [camy vm ls](camy_vm_ls.md)	 - Every VM you own, across roles
 * [camy vm provision](camy_vm_provision.md)	 - Provision (or reconcile) your workspace
 * [camy vm resize](camy_vm_resize.md)	 - Resize the workspace in place — data survives; downgrades are refused server-side

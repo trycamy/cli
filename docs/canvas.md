@@ -115,8 +115,13 @@ Before writing anything, `pull` checks every destination path across the
 whole file set, so a conflict found late in the list can't leave earlier
 files already written. Two safety rules apply per file:
 
-- A filename the server sends containing `..`, starting with `/`, or empty
-  is silently dropped from the pull — never trusted as a local path.
+- A filename that is empty, starts with `/`, or has a `..` path component
+  (`../x`, `a/../../b`) is never trusted as a local path. `pull` skips it
+  and names every skipped file on stderr (under `--json`, in `skipped`
+  instead), for example
+  `skipped 1 file — a path that is empty, absolute or climbs out of ./site is never written: "../x"`.
+  A name that only contains two dots, such as `jquery..min.js`, is an
+  ordinary file and is written.
 - A destination that already exists as a **symlink**, live or dangling, is
   refused unconditionally, even with `--force`. Remove it first, or pull
   into a fresh directory.
@@ -129,8 +134,11 @@ pull can leave it behind, empty.
 `--json`:
 
 ```json
-{"ok": true, "chat_id": "<full chat id>", "dir": "./site", "files": 6}
+{"ok": true, "chat_id": "<full chat id>", "dir": "./site", "files": 6, "skipped": []}
 ```
+
+`skipped` lists the filenames left out by the first rule above, and is an
+empty array when there were none.
 
 See [`camy canvas pull`](reference/camy_canvas_pull.md).
 
@@ -143,7 +151,8 @@ camy canvas preview
 Writes the canvas to a fresh temporary directory and opens it in your own
 browser as a local file. Nothing is published. It picks `index.html` if
 present, otherwise the first `.html` file it finds; a canvas with no HTML
-file at all exits 1.
+file at all exits 1. It skips the same unsafe filenames `pull` does, and
+names them on stderr.
 
 Because this runs model-generated HTML and JavaScript the moment it opens —
 code that hasn't been reviewed, executing locally on your machine — it asks
@@ -215,6 +224,38 @@ Human output reports how many files came back. See
 
 ## Publishing a site
 
+### Sites and your workspace
+
+Publishing writes a site's files onto your [workspace](workspace.md), and a
+site's archived versions are kept there too. So `publish`, `rollback`,
+`sites` and `versions` all depend on the workspace.
+
+`sites` and `versions` won't boot a stopped workspace just to list what's on
+it. If it is stopped or stopping, they exit 7 with, for example,
+`your workspace is stopped — listing its sites would start it` and a hint to
+run `camy vm start` first. With no workspace at all they still list, and
+nothing is created.
+
+When camy.ai can list without starting the workspace, the listing goes ahead
+on a stopped workspace instead, and a note on stderr says why the list may be
+short, for example
+`your workspace is stopped — the sites stored on it show up once it's running (camy vm start, then camy canvas sites)`.
+`--json` prints the rows alone, without the note.
+
+`publish` starts a stopped workspace first, and creates one if you have
+none; `rollback` starts a stopped one. Each says so before its confirmation
+prompt (unless `--quiet`, or camy couldn't read the workspace's state),
+because the workspace is billed while it runs, and then waits up to 30
+minutes for it:
+
+```text
+! your workspace is stopped — this starts it first (a few minutes; billed while it runs)
+```
+
+`rollback` with no workspace at all is refused before the prompt, with exit
+7: the site's archived versions lived on the old workspace, so there is
+nothing to roll back to. `camy canvas publish` ships the site again.
+
 ### `camy canvas publish`
 
 ```bash
@@ -227,6 +268,9 @@ confirmation prompt — you see the real URL before agreeing, not after.
 
 If the host isn't claimable at all (already taken, for example), `publish`
 fails with the server's reason and never reaches the confirmation prompt.
+If camy.ai then refuses the publish itself (an invalid or reserved site
+name, or a file a site can't serve, for example), `publish` fails with
+camy.ai's own sentence and exit 1.
 
 Human output links the new site's URL and reports how many files were
 published. See [`camy canvas publish`](reference/camy_canvas_publish.md).
@@ -294,7 +338,9 @@ camy canvas rollback SITE VERSION
 Rolls a published site back to an earlier version: one publish back if you
 leave `VERSION` off (the server picks "one back," not the CLI), or to a
 specific version if you name one from `camy canvas versions`. It asks for
-confirmation, worded around exactly what it's about to do.
+confirmation, worded around exactly what it's about to do. It starts a
+stopped workspace first, and refuses outright when you have no workspace;
+see [Sites and your workspace](#sites-and-your-workspace).
 
 Human output confirms the site is now serving the older version, and names
 it when the service reports which one it restored:
@@ -434,7 +480,9 @@ The destination is protected the same way
 [`camy download`](reference/camy_download.md) protects a download. A target
 that already exists as a symlink is refused outright, and `--force` doesn't
 override that; an ordinary existing file is refused unless you pass
-`--force`.
+`--force`. With `-o`, that check runs before anything is exported, so a
+refused destination costs no export; a name the server suggests can only be
+checked once the download is in.
 
 `--json`:
 
@@ -548,6 +596,8 @@ itself, and `preview` is an interactive action, not a data command.
 | A filename `cat` can't find | 1 |
 | An empty canvas | 1 |
 | No HTML entry point for `preview` | 1 |
+| `sites` or `versions` on a stopped or stopping workspace (when listing would start it) | 7 |
+| `rollback` with no workspace | 7 |
 
 ## See also
 

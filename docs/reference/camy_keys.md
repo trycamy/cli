@@ -50,7 +50,7 @@ camy keys revoke ky_007a         dead in seconds everywhere
 ### SEE ALSO
 
 * [camy](camy.md)	 - Camy in your terminal — the same agent, memory, and cloud computer you run at camy.ai
-* [camy keys list](camy_keys_list.md)	 - Your API keys with created/last-used
+* [camy keys list](camy_keys_list.md)	 - Your API keys with created, expiry and last-used
 * [camy keys revoke](camy_keys_revoke.md)	 - Revoke a key — dead in seconds everywhere
 * [camy keys rotate](camy_keys_rotate.md)	 - Rotate a key (new fullKey shown once)
 

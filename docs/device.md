@@ -42,8 +42,14 @@ camy: linking a computer needs a browser approval
 ```
 
 `--label` gives this Mac a name other than its host name. A Mac that is
-already linked refuses; run `camy device forget` first to link it again. If
-linking isn't available for your account, the command says
+already linked refuses (`This Mac is already linked as <name>.`); run
+`camy device forget` first to link it again. A link this Mac already knows
+was revoked doesn't count: linking again replaces it. `camy device enroll`
+treats a link whose credential expired the same way, but only once the
+resident agent has run and recorded the expiry. `camy auth login` links this
+Mac again as soon as the expiry date it has on record has passed. When the
+old link is still listed at Camy, camy revokes it with your terminal's
+sign-in, or tells you to revoke it under Settings, then Your computers. If linking isn't available for your account, the command says
 `Linking a computer isn't on for your account yet.`
 
 Linking leaves two things on this Mac. The first is a signing key, made on
@@ -58,7 +64,12 @@ A Mac whose signing key is kept in a file can only ever be granted reading.
 
 The second is this Mac's own Camy credential, which the approval returns.
 camy stores it the way it stores your terminal's key, and this Mac uses it
-whenever it talks to Camy for itself. `camy device forget` removes both.
+whenever it talks to Camy for itself. The credential expires. It is renewed
+only while the resident agent, which `camy device install` starts from
+Camy.app, is running during the last days before the expiry (see
+[Run it in the background](#run-it-in-the-background)). Without the agent,
+the link expires and `camy auth login` links this Mac again (see
+[Status](#status)). `camy device forget` removes both.
 
 A freshly linked Mac can do nothing. Every capability is a grant you add.
 
@@ -82,6 +93,12 @@ no path, it refuses with `which folders? give at least one PATH`.
 `--network` allows outbound network for that grant, `--expires` gives it an
 RFC 3339 end time instead of standing, and `--mode-ceiling` sets the highest
 mode the grant is honored in (`watching` unless you set it).
+
+A PATH can be a folder, which covers everything beneath it, or a single
+file, which covers only that file. `~` means your home folder on this Mac,
+whether you add the grant here or in Settings. The resident agent skips a
+single-file grant whose path is a link, and a command grant on a file,
+since commands run in folders, and says so in its log.
 
 A Mac whose signing key is kept in a file can only be granted reading. camy
 refuses anything more before it asks Camy:
@@ -115,11 +132,35 @@ lease, and whether the resident agent is running, with its process id while
 it is. A link can be **active**, still **pending** setup, **paused** with its
 scopes frozen but kept, in need of a **recheck** with scopes suspended until
 Camy confirms it is still running genuine Camy software, **suspended**, or
-**revoked**. A Mac that has not reached Camy for 72 hours suspends itself
-and refuses every capability until it reconnects; one that stays quiet for a
-long while is suspended on the server side, and reconnecting resumes it with
-its scopes intact. `--json` gives the same as an object, with `agent_running`
-and, while the agent runs, `agent_pid`.
+**revoked**. A Mac that has not reached Camy for 72 hours, or for the
+shorter limit Camy sets for it, suspends itself and refuses every capability
+until it reconnects; one that stays quiet for a long while is suspended on
+the server side, and reconnecting resumes it with its scopes intact. `--json`
+gives the same as an object, with `agent_running` and, while the agent runs,
+`agent_pid`. It also carries `key_expired`, `key_renewal_blocked`, and, once
+this Mac knows it, `key_expires_at`, the expiry of this Mac's own
+credential.
+
+The resident agent renews that credential on its own as its expiry nears,
+while the link is active or paused. A suspended Mac, or one waiting on a
+recheck, can't renew, and `status` says by when to resume it:
+
+```text
+  MacBook Air can't renew its link while it isn't active — resume it by Oct 20, 3:04pm or it will need linking again.
+```
+
+If the credential expires anyway, for example because the agent wasn't
+running, nothing is wiped. The agent stops instead of running on it, and
+`status` says:
+
+```text
+  MacBook Air's link expired — its grants are kept. camy auth login (or camy device enroll) links it again.
+```
+
+When only `status` has seen the expiry, as when the agent wasn't running,
+use `camy auth login`. `camy device enroll` refuses with
+`This Mac is already linked as <name>.` until the agent has run once and
+recorded the expiry, or until you run `camy device forget`.
 
 `status` asks Camy with this Mac's own credential, so an expired sign-in in
 your terminal doesn't make the Mac look revoked. When Camy can't be reached,
@@ -147,21 +188,56 @@ is active.
 never grows without bound. When the agent exits with an error, the log keeps
 the reason, with the one exception below.
 
+Only one agent runs per profile. A second `camy device run`, the command the
+LaunchAgent starts (`camy device --help` doesn't list it), stops before it
+contacts Camy and exits 0 without printing anything in the terminal, so the
+LaunchAgent doesn't restart it. It writes this line to the agent's log, where
+`camy device logs` shows it:
+
+```text
+  ⋮ MacBook Air is already being watched by another camy device run (pid 4812) — this one stops.
+```
+
 The agent refuses to start, without touching the network, when this Mac was
-stopped with [`camy stop`](#stop-it-now) or its link is already known to be
-revoked. If Camy answers the agent's first connection by saying it could not
-confirm which Mac is connecting, the agent exits with an error instead of
-running without a device's protections. It writes nothing to its log that
+stopped with [`camy stop`](#stop-it-now), its link is already known to be
+revoked, or an earlier run already recorded that its credential expired. The
+first start after an expiry no run has recorded reaches Camy once, learns of
+the expiry, records it, and stops without wiping anything. If Camy answers the agent's first
+connection by saying it could not confirm which Mac is connecting, the agent
+exits with an error instead of running without a device's protections. It writes nothing to its log that
 explains why. Under `install`, the LaunchAgent starts it again about every 10
 seconds, and each start repeats the check.
 
-The agent also reads the folder rules set for this Mac in Settings once a
-minute. Only a folder set to Allow becomes a grant, and it is a write grant.
-A Mac whose signing key is kept in a file, which is every Mac this release
-links, skips it, so the folder rules don't change what such a Mac may do.
-Command rules aren't applied on this Mac. If Camy won't let this Mac's own
-credential read those rules, the agent says so once in its log and keeps to
-the grants Camy sends.
+While it runs, the agent checks in with Camy every 30 seconds. Each check-in
+carries this Mac's current grants, so a change reaches a connected Mac
+without a restart. A change that takes something away, such as a grant
+removed or expired, or a new Off rule, applies at once and stops anything
+still running under the old grants. A change that only adds lets running
+commands finish first, for up to two minutes; meanwhile a new call is
+refused with `<name> is picking up a change to what it may do — try again in a moment.`
+
+With each check-in the agent also reads the folder and command rules set for
+this Mac in Settings, and refuses anything set to Off on its own: a file tool
+refuses a path in a folder set to Off, searches and listings skip that
+folder, and a command set to Off is refused before it runs, even behind a
+wrapper such as `env`, `nice`, `xargs`, or `nohup`, or inside an `sh -c`
+script. So is a command that names a path in a folder set to Off. A rule
+value this Mac doesn't recognize counts as Off. If one read of the rules
+fails, the agent keeps the rules it last read, and a start with no network
+uses them too. If Camy won't let this Mac's own credential read the rules,
+the agent says so once in its log and refuses only the Off rules it last
+read.
+
+A rule set to Allow never adds a grant. A Mac whose signing key is kept in a
+file, which is every Mac this release links, skips every `files.write` and
+`shell.exec` grant, so no write runs under an Allow rule there. On a Mac
+with a hardware-backed key, when Camy approves a write or a command under an
+Allow rule without asking you, this Mac runs it on Camy's
+signed approval, as it would your own yes, and only inside the grants it
+already holds. For a folder's Allow rule, this Mac first follows every link
+on the way to the target. A write or command that a link leads outside that
+folder, or into a folder set to Ask or Off, is refused and nothing runs;
+asking again shows you a card.
 
 ## Stop it now
 
@@ -204,18 +280,30 @@ Three actions, deliberately separate:
 
 - **Pause or revoke** on camy.ai, under Settings, then Your computers. Pausing
   freezes the scopes; revoking ends the link on the server. The resident
-  agent acts on a revoke as soon as it hears of it: it clears the grants it
-  had cached, notes the revoke in the ledger, writes
-  `<name> was revoked — stopping.` to its log, and does not start again.
+  agent acts on a revoke as soon as it hears of it, and a Mac that was asleep
+  or offline hears of it when it next reaches Camy. It clears the grants it
+  had cached and this Mac's own credential, notes the revoke in the ledger,
+  writes `<name> was revoked — stopping.` to its log, and does not start
+  again. `camy auth login` or `camy device enroll` then links the Mac again,
+  with no `camy device forget` first.
 - **`camy device forget`** erases this Mac's half of the link: the key, the
-  stored credential, the record, and the ledger. It does not revoke anything
-  on the server, and says so; revoke there too if the Mac is gone.
+  stored credential, the record, and the ledger. When this terminal is
+  signed in to your account, it also revokes the link on the server
+  (`✓ this Mac forgot its link to Camy, and <name> is revoked.`); otherwise
+  it says to revoke it there too.
 - **`camy device uninstall`** stops the background agent. The link stays.
+
+A revoke is the only answer from Camy that clears this Mac's grants. An
+expired credential, a suspended account, or a server error leaves them in
+place, and a credential Camy stops recognizing counts as revoked only once
+that has held for three minutes.
 
 A `camy` chat session that offers this computer through
 [the local bridge](local-bridge.md) is taken back when Camy disconnects it:
 the session stops offering this computer at once, does not reconnect, and
-ends.
+ends. The resident agent does the same: it writes
+`<name> was disconnected from Camy — stopping.` to its log and stops, and the
+link and its grants stay.
 
 ## See also
 

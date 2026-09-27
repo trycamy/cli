@@ -6,7 +6,16 @@ Run a command on your workspace — the remote exit code becomes your exit code
 
 Runs on your dedicated cloud workspace. stdout/stderr come home on their own
 streams and the remote exit code (0-254) is mirrored to your shell, ssh-style.
-camy's own failures for this command exit 255 with the reason on stderr.
+Like ssh, one argument is handed to the remote shell as written
+(camy vm exec -- 'cd app && make'); several are quoted word by word so the
+remote sees exactly your argv, a leading NAME=value staying an assignment
+(camy vm exec -- FOO=1 make). stdin is not forwarded.
+camy's own failures for this command — camy.ai unreachable, no workspace,
+the agent failed, the command outlived --timeout, a key without the
+workspace:exec scope — exit 255 with the reason on stderr.
+A usage error exits 2 before anything runs; --no-wake exits 7.
+camy auth login's key carries workspace:exec; one minted before that scope
+existed doesn't.
 
 ```
 camy vm exec -- CMD... [flags]
@@ -16,7 +25,8 @@ camy vm exec -- CMD... [flags]
 
 ```
   camy vm exec -- pytest -q
-  camy vm exec --cwd ~/app -- make test && echo green
+  camy vm exec --cwd /workspace/app -- make test && echo green
+  camy vm exec -- 'cd app && npm test'
 ```
 
 ### Options

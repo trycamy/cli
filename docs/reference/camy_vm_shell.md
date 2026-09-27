@@ -2,6 +2,13 @@
 
 A live PTY on your workspace — resize and all
 
+### Synopsis
+
+A live PTY on your running workspace (the terminal never starts it — camy vm
+start does). Needs a key with the workspace:exec scope, which camy auth login's
+key carries; one minted before that scope existed is refused (exit 3) until
+you sign in again.
+
 ```
 camy vm shell [flags]
 ```

@@ -1,6 +1,6 @@
 ## camy keys list
 
-Your API keys with created/last-used
+Your API keys with created, expiry and last-used
 
 ```
 camy keys list [flags]

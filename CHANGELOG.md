@@ -9,6 +9,143 @@ change to either that is not backward compatible bumps the major version.
 Each GitHub Release on this repository carries the same notes as its section
 below, plus the signed checksums for that version.
 
+## 1.0.5 — 2026-09-27
+
+This update keeps a linked Mac working on its own, makes sign-in, keys and
+exit codes more predictable, has chats, mail and approvals report what
+really happened, and adds a command that logs your cloud computer out of
+every site.
+
+**New**
+
+- Adds `camy vm logout-everywhere`: forgets the logins Camy saved, clears
+  your cloud computer's browser and stops its running tasks, after a
+  confirmation and a fresh code. It runs only with the key `camy auth login`
+  gave this terminal; sign in again first if you used `--code` before this
+  update. See [camy vm logout-everywhere](docs/workspace.md#camy-vm-logout-everywhere).
+- Adds `camy inbox trash` and `camy inbox unread`, each taking several ids;
+  `camy inbox restore` brings trashed mail back. See
+  [Batch actions](docs/inbox.md#batch-actions).
+- `camy chats search`, `camy runs search` and `camy jobs search` now page
+  with `--offset`; a full page names the offset for the next one. See
+  [Searching past chats](docs/chat.md#searching-past-chats).
+- A linked Mac now renews its own credential before it expires, including
+  while the link is paused, and `camy device status` says by when to resume
+  a Mac that cannot. See [Status](docs/device.md#status).
+- Adds `--no-gpu` to `camy vm resize`; a resize without `--gpu` or
+  `--no-gpu` now keeps the GPU add-on as it is. `camy vm sizes` marks the
+  sizes your plan cannot run. See [camy vm resize](docs/workspace.md#camy-vm-resize).
+- `camy keys list` now shows when each key expires, and in `camy approvals`
+  a checkout hold names the amount and the merchant.
+
+**Improvements**
+
+- A linked Mac keeps its grants when its credential expires or its
+  connection drops; only a revoke clears them. One resident agent runs per
+  profile, and `camy device forget` also revokes the link on camy.ai. See
+  [Run it in the background](docs/device.md#run-it-in-the-background).
+- Fixes commands a linked Mac refused instead of running: read-only
+  commands run under a `shell.read` grant, a grant on a single file covers
+  that file, `~` means this Mac's home wherever the grant was added, and a
+  clock slightly behind no longer refuses approved writes. See
+  [Grant and remove scopes](docs/device.md#grant-and-remove-scopes).
+- `camy auth login` now asks for the `workspace:exec` scope that
+  `camy vm exec` and `camy vm shell` need. A key from an earlier version is
+  refused with a hint to sign in again, so run `camy auth login` after
+  updating if you use either. See
+  [The workspace:exec scope](docs/workspace.md#the-workspaceexec-scope).
+- `camy auth login` now retires the key this terminal held before, only
+  once the new one works, and never a key you pasted or set in
+  `CAMY_API_KEY`. `--code` completes a first sign-in, which used to end in
+  exit 3, and a sign-in stops waiting the moment it is no longer pending.
+  See [Signing in again](docs/authentication.md#signing-in-again).
+- `camy keys rotate` on this terminal's own key stores the replacement, so
+  the terminal keeps working, and `camy auth logout --revoke` says whether
+  it revoked. See [camy keys](docs/authentication.md#camy-keys).
+- Tells you why camy.ai refused a key: expired or revoked says which, a
+  missing scope names the `--scopes +scope` that adds it, and a rate limit
+  longer than two minutes fails at once with exit 5 and names the wait. See
+  [Not signed in (exit 3)](docs/troubleshooting.md#not-signed-in-exit-3).
+- `camy vm exec` now finishes waking a stopped workspace, or waits out one
+  already starting or stopping, before your command runs, so the command
+  gets its whole `--timeout`; `--no-wake` still exits 7. With no workspace
+  it exits 255 instead of 7, and camy's own timeout exits 255 with
+  `timed out after Ns` instead of 124. See
+  [Exit codes](docs/workspace.md#exit-codes).
+- `camy vm exec` runs a single argument after `--` as a shell line, passes
+  piped standard output through byte for byte, and says when the workspace
+  cut the output short. `camy vm shell` explains a refusal as it connects
+  rather than showing a raw connection error, and typed or pasted input no
+  longer closes the shell. See [camy vm exec](docs/workspace.md#camy-vm-exec).
+- `camy canvas sites`, `camy canvas versions` and `camy vm apps` no longer
+  start a stopped workspace just to list it; they exit 7 and point at
+  `camy vm start`. `canvas publish` and `rollback` say before confirming
+  that they start the workspace, then wait for it. See
+  [Sites and your workspace](docs/canvas.md#sites-and-your-workspace).
+- `camy connectors check` on a server whose tools changed now exits 2 and
+  points at `review`, and `review` under `--json` or `--no-input` approves
+  only with the new `--yes` or with `--force`. `check`, `pause` and
+  `resume` say what the connection is, and the CHECKED column shows when
+  Camy last heard from it. See
+  [Review what changed](docs/connectors.md#review-what-changed).
+- `camy chat` ends a failed connection on its real exit code instead of 1:
+  3 for a refused key, 5 for a rate refusal or the connection cap, 7 when
+  camy.ai is unavailable; after a camy.ai restart it redials and resends.
+  `--tier` takes only `agent` or `quick`. See
+  [After the turn](docs/chat.md#after-the-turn).
+- `camy chat` picks up where the stream left off after a reconnect
+  mid-turn, and says so if part of the reply may be missing. A turn that
+  finished while the connection was down no longer hangs, a failed tool is
+  never shown as a success, and a turn stopped for lack of credits says so
+  and exits 6.
+- A headless `camy chat` no longer waits on an open stdin that sends
+  nothing, `--attach` accepts `.txt`, `.md` and `.csv` files, and piped
+  input past 64 KB is sent as a `stdin.txt` attachment, except in a
+  `--temp` chat, which never uploads piped input on its own. See
+  [stdin as context](docs/chat.md#stdin-as-context).
+- Ctrl-\ now exits 131 instead of dumping the runtime; `CAMY_DEBUG_DUMP=1`
+  keeps the dump. See [Exit codes](docs/exit-codes.md#131--quit).
+- Under `--json`, a `checkpoint` event carries the tool, risk, prompt,
+  command, expiry and any choices, a `tool_call` event carries its
+  parameter, a replayed card is reported once as `checkpoint_replayed`, and
+  other chats' events are left out. See
+  [NDJSON for streams](docs/scripting.md#ndjson-for-streams).
+- Fixes approvals reported as yours when the app, the web or another
+  terminal settled them first. Typing a choice's number, id or label now
+  picks it, `approve` on an agent's question points at `answer`, a decision
+  that lives on the web says so, and `approve --wait` no longer asks again
+  for a card you just approved. See [Deciding](docs/approvals.md#deciding).
+- `camy inbox unsnooze` and `restore` find a short id among your snoozed,
+  archived and trashed mail, and one that matches none is a usage error.
+  The list footer counts the view you asked for and names the next cursor,
+  sent rows name who they went to, and `inbox show` says read or unread.
+  See [The unified inbox](docs/inbox.md#the-unified-inbox).
+- `camy inbox reply` says so when camy.ai did not actually queue a
+  scheduled reply, and `camy inbox send` tells you to check before retrying
+  a send that may have gone out. See [Replying](docs/inbox.md#replying).
+- `camy integrations connect` waits for your sign-in to land and stops at
+  once when it grants fewer permissions than Camy needs; a broken account
+  reads `reconnect`, and a broken Microsoft sign-in names the service. See
+  [Integrations](docs/automation.md#integrations).
+- Steadies the full-screen app: a steer is never sent twice, the connection
+  heals in place and stops retrying a refused key, and the terminal is
+  restored when Camy disconnects this computer.
+- `camy schedule` shows a paused job's schedule as paused, `camy tasks`
+  never shows a done task as overdue, `camy jobs show` shows fractional
+  credits, `camy plan` reads the daily allowance in credits, and
+  `camy status` no longer counts approvals already running as waiting.
+- `camy sweep restore --items` with no ids is refused instead of restoring
+  the whole batch, `camy feed act` can press card actions it used to
+  refuse, and `camy webhooks dead-letters` says when there are more than it
+  shows. See
+  [Reviewing and restoring](docs/inbox.md#reviewing-and-restoring).
+
+**Security**
+
+- Hardens how a linked Mac enforces the rules and grants you set, how
+  sign-in keys are issued and revoked, how the workspace terminal connects,
+  and how approval cards are shown. Updating is recommended.
+
 ## 1.0.4 — 2026-09-25
 
 This update makes camy more careful on your machine and easier to search

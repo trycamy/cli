@@ -1,12 +1,13 @@
 ## camy device forget
 
-Forget this Mac's link locally — its key, record and trail
+Forget this Mac's link — its key, record and trail
 
 ### Synopsis
 
 Erases this computer's own half of the link: the device key, the stored
-credential, the record and the local trail. It does not revoke anything —
-do that in Settings → Your computers (or camy device status to check).
+credential, the record and the local trail. When this terminal is signed in
+to the account it also revokes the link at Camy; otherwise revoke it in
+Settings → Your computers.
 
 ```
 camy device forget [flags]

@@ -10,9 +10,9 @@ camy connectors
 ```
 
 Every connection in one table: its name, what kind it is, its status, its
-tools, and when it was last checked. `camy connectors list` prints the same
-table. `--json` gives the rows, and `--json --raw` the whole answer from
-camy.ai, including whether part of it couldn't be read.
+tools, and when Camy last heard from it. `camy connectors list` prints the
+same table. `--json` gives the rows, and `--json --raw` the whole answer
+from camy.ai, including whether part of it couldn't be read.
 
 A row marked `!` needs you: its sign-in expired, its tools changed, or
 the server stopped answering. The status column says which:
@@ -31,6 +31,11 @@ the tools Camy keeps ready on every turn, then the rest that are on, which
 load when a task needs them.
 Otherwise it counts the tools that are on (`4 of 6 on`), or the ones kept
 while paused (`9 kept`).
+
+The checked column shows when Camy last heard from the connection, such
+as `3h ago`. It reads `—` when there's no record of that, and while the
+connection is paused. For a server that stopped answering, it shows when
+Camy tries again, such as `retry in 12m`, or `—` when that isn't known.
 
 Accounts and servers you haven't connected aren't listed; a last line
 counts them and links to camy.ai. If Camy couldn't read part of your
@@ -54,6 +59,7 @@ yet.
 
 ```bash
 camy connectors review <name>
+camy connectors review <name> --yes --json
 ```
 
 A tool server can change the tools it offers after you approved it, and
@@ -64,9 +70,14 @@ approves the new set and turns every tool you kept back on; anything else
 leaves the changes off. A server with nothing to review says so and asks
 nothing.
 
-Under `--no-input` it reports and changes nothing. Under `--json` it
-doesn't list or ask: it approves the server's current tools and prints the
-connection as camy.ai returns it.
+`--yes` approves without asking, and so does `--force`. Without either,
+nothing is approved on a script's behalf: under `--no-input`, `review`
+lists what changed, and under `--json` it prints nothing on stdout; both
+then exit 2 with a message such as
+`approving Linear's tool changes needs confirmation`.
+With `--yes` or `--force`, `--json` approves the server's current tools
+and prints the connection as camy.ai returns it. On a server with nothing
+to review, `--json` prints the connection as listed and approves nothing.
 
 ## Check, pause, resume, remove
 
@@ -77,11 +88,33 @@ camy connectors resume <name>
 camy connectors remove <name>
 ```
 
-`check` tests the connection now. On a tool server, it also approves the
-server's current tools, the same step `review` ends with, so review a
-changed server before you check it. `pause` stops anything from running
-through it while keeping its rules; `resume` reverses that. `remove` takes
-it away.
+`check` tests the connection now and prints what it found:
+
+```text
+✓ Gmail — checked · connected · me@example.com
+```
+
+When the connection isn't working, the line says so, as in
+`Gmail — checked · sign-in expired`, followed by the next step when there
+is one, such as `camy integrations connect gmail`.
+
+On a tool server, checking also approves the server's current tools, the
+same step `review` ends with. So when a server's tools changed, `check`
+refuses with exit 2 and points you at `camy connectors review`, rather than
+approve changes you haven't seen.
+
+`pause` stops anything from running through it while keeping its rules;
+`resume` reverses that. `remove` takes it away. Like `check` and a `review`
+approval, `pause` and `resume` print what the connection is now: `resume`
+on a server that wasn't paused says `wasn't paused; nothing to resume`, and
+one that resumed but doesn't answer says `resumed, but unreachable`.
+
+When `check` or a `review` approval can't read a tool server's tools
+(the server doesn't answer, say), the command exits 1 with the reason,
+such as `Couldn't reach the app.`, and the hint
+`camy connectors list shows Linear's status · try again in a moment`.
+`resume` finishes in that case and reports `resumed, but unreachable`; it
+exits 1 only when camy.ai itself fails.
 
 `pause`, `resume`, and `remove` work on tool servers you added. An account
 you signed in with can't be paused or removed here; camy.ai refuses, and

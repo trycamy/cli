@@ -1,23 +1,22 @@
-## camy connectors review
+## camy inbox trash
 
-See what a server changed since you approved it, and approve the changes
+Move to the trash (provider write-through; restore brings it back)
 
 ```
-camy connectors review NAME [flags]
+camy inbox trash ID... [flags]
 ```
 
 ### Examples
 
 ```
-  camy connectors review linear                # shows what changed, then asks
-  camy connectors review linear --yes --json   # approve without asking
+  camy inbox trash em_7f31 em_2a0c
+  camy inbox restore em_7f31          # changed your mind
 ```
 
 ### Options
 
 ```
-  -h, --help   help for review
-      --yes    approve the changes without asking — --json and --no-input approve only with this or --force
+  -h, --help   help for trash
 ```
 
 ### Options inherited from parent commands
@@ -49,5 +48,5 @@ camy connectors review NAME [flags]
 
 ### SEE ALSO
 
-* [camy connectors](camy_connectors.md)	 - Your connections — accounts, servers, and what each may do
+* [camy inbox](camy_inbox.md)	 - unified inbox — list, show, reply, undo
 

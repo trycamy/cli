@@ -126,7 +126,7 @@ invocation.
 |---|---|---|
 | `--no-local` | `CAMY_NO_LOCAL=1` | Disables the bridge entirely for this session. No read tools, no write tools — the agent cannot touch this machine at all. |
 | `--read-only` | `CAMY_LOCAL_READONLY=1` | Keeps the read tools; turns off `run_command`, `write_file`, and `edit_file`, and the background-job tools with them, for this session. |
-| `--sandbox off\|observe\|enforce` | `CAMY_LOCAL_SANDBOX` | How `run_command` is confined by the operating system, this session only. `observe` runs commands unconfined and reports that; `enforce` lets a command write only inside the project root, the system temp directory, and your user cache directory, through Seatbelt on macOS and bubblewrap on Linux, and falls back to `observe` where the sandbox tool is missing. Left unset, it is `observe` until 6 October 2026 (00:00 UTC) and `enforce` from then on wherever the OS can fully enforce it, although the flag's own help text still says `default observe`; see [The boundary, and the sandbox](#the-boundary-and-the-sandbox). `camy --version` prints the posture, and `camy --version --json` carries it as `local_sandbox`. |
+| `--sandbox off\|observe\|enforce` | `CAMY_LOCAL_SANDBOX` | How `run_command` is confined by the operating system, this session only. `observe` runs commands unconfined and reports that; `enforce` lets a command write only inside the project root, the system temp directory, and your user cache directory, through Seatbelt on macOS and bubblewrap on Linux, and falls back to `observe` where the sandbox tool is missing. Left unset, it is `observe` until 6 October 2026 (00:00 UTC) and `enforce` from then on wherever the OS can fully enforce it, as the flag's own help text says; see [The boundary, and the sandbox](#the-boundary-and-the-sandbox). `camy --version` prints the posture, and `camy --version --json` carries it as `local_sandbox`. |
 | `--cloud` | `CAMY_CLOUD=1` | Defaults a plain turn to your workspace instead of this machine. Does **not** turn the bridge off — the tools stay available to the agent if it reaches for them — but it does stop `AGENTS.md`/`CLAUDE.md` discovery (see [Project instructions](#project-instructions)). |
 | `--no-project-instructions` | `CAMY_NO_PROJECT_INSTRUCTIONS=1` | Skips `AGENTS.md`/`CLAUDE.md` discovery, independent of `--cloud`. |
 
@@ -432,9 +432,8 @@ Left unset, the dial is `observe` until 6 October 2026 (00:00 UTC). From
 that date an unset dial means `enforce` on any machine that can fully
 enforce it, and on such a machine camy.ai can move an unset session to
 `enforce` sooner. The `--sandbox` flag's own help text, and the reference
-pages that list it, still say `default observe`; the date-based default
-described here is what camy does. Nothing camy.ai sends can move the dial
-toward `off`, and an explicit `--sandbox observe` or
+pages that list it, give the same date. Nothing camy.ai sends can move the
+dial toward `off`, and an explicit `--sandbox observe` or
 `CAMY_LOCAL_SANDBOX=observe` always stays `observe`.
 
 The CLI never answers a card for you that asks to loosen the sandbox for a

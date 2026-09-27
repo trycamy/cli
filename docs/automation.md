@@ -51,17 +51,28 @@ still exit non-zero.
 ```bash
 camy jobs search "newsletter"
 camy jobs search "invoice" --status active
+camy jobs search "invoice" --offset 25
 ```
 
 Finds jobs by the words you set them up with and prints them in the same
 list as `camy jobs`, under a count of how many matched. When the page
-comes back full, a line under the list says more may have matched.
-`QUERY...` is one or more words, joined with spaces, up to 200 characters.
+comes back full, a line under the list says more may match and names the
+flag for the next page:
+
+```text
+more jobs may match than this page shows — --offset 25 for the next page
+```
+
+A page past the last match says
+`no more jobs matched "invoice" past offset 25` rather than that nothing
+matched. `QUERY...` is one or more words, joined with spaces, up to 200
+characters.
 
 | Flag | Effect |
 | --- | --- |
 | `--status string` | the same values as `camy jobs --status`, passed straight through; a value the server doesn't know finds nothing rather than failing |
 | `-L, --limit int` | how many to show, 1 to 100 (default 25) |
+| `--offset int` | skip that many matches (default 0); a negative value is a usage error before any network call |
 
 If search isn't on for your account yet, the command says so and exits 1.
 
@@ -77,9 +88,10 @@ Shows one job as a pane. What it's stuck on comes first, if anything: a
 question nobody answered, with the `camy approvals answer` command that
 frees it, or the error from its last run. Then its title, schedule and next
 fire, last run, how its runs went, and, when the job has them, its
-progress, credits spent, and the chat it came from. The pane shows up to
-eight recent runs, newest first. `--json` carries up to the 50 most recent
-runs; older runs aren't returned. Name several ids to get a pane each.
+progress, credits spent (fractions included, as in `12.5 spent`), and the
+chat it came from. The pane shows up to eight recent runs, newest first.
+`--json` carries up to the 50 most recent runs; older runs aren't
+returned. Name several ids to get a pane each.
 
 `--web` opens camy.ai instead of rendering the job: it prints the link to
 Settings → Activity, where your jobs are listed (there's no page for a
@@ -134,12 +146,16 @@ fire.
 A recurring schedule shows its next fire, not the first one it ever had.
 A paused schedule stays in the list, under the same id, with `—` for next
 fire, since it won't fire until you resume it; it sorts after everything
-that will. A scheduled task on a cron outside the three `WHEN` shapes
-below (weekdays only, say) shows the cron itself and `—` for next fire.
+that will. The schedule behind a suspended job rests the same way, marked
+`○` with `—` for next fire. A scheduled task on a cron outside the three
+`WHEN` shapes below (weekdays only, say) shows the cron itself and `—` for
+next fire.
 
 The reminders-and-timers half of the list covers the first 100 that are
-still pending (active, paused, or snoozed), soonest fire first. If reading
-those, or your scheduled tasks, fails, the list quietly leaves them out.
+still pending (active, paused, or snoozed), soonest fire first. When all
+100 come back, the count above the list reads `N+ schedules` and a line
+under it says more are active than shown. If reading those, or your
+scheduled tasks, fails, the list quietly leaves them out.
 
 ### Creating a schedule
 
@@ -294,15 +310,20 @@ they ran.
 ```bash
 camy runs search "timeout"
 camy runs search "invoice" --status failed
+camy runs search "timeout" --offset 25
 ```
 
 Prints up to two lists. First the runs that matched: what ran, its state,
 and how long ago. Then "What your agents said": each matching piece of an
 agent's output, with its title, state, and age, and an excerpt with the
 matching words in bold. A line under the runs says when more matched than
-it shows. A line under "What your agents said" appears whenever that list
-came back full, so more may have matched. Runs are listed without ids,
-since no command takes one.
+it shows, and names the flag for the next page, as in
+`--offset 25 for the next page`. A line under "What your agents said"
+appears whenever that list came back full, so more may have matched. Runs
+are listed without ids, since no command takes one. Past the last run, a
+page shows no runs and repeats "What your agents said" unchanged. The line
+`no more runs matched "timeout" past offset 25` appears only when nothing
+your agents said matched either.
 
 `QUERY...` is one or more words, joined with spaces, up to 200 characters.
 
@@ -311,9 +332,11 @@ since no command takes one.
 | `--status string` | one of `running`, `completed`, `dispatched`, `skipped_empty`, `needs_attention`, `failed`; anything else is a usage error before any network call |
 | `--source string` | one of `scheduled_agent`, `kernel_schedule`, `web_monitor`, `standing_goal`, checked the same way |
 | `-L, --limit int` | how many runs, 1 to 100 (default 25), newest first |
+| `--offset int` | skip that many runs (default 0); a negative value is a usage error before any network call |
 
-`--status` and `--source` narrow the runs list only. "What your agents
-said" matches on your words alone and isn't filtered by either flag.
+`--status` and `--source` narrow the runs list only, and `--offset` pages
+it. "What your agents said" matches on your words alone; it isn't filtered
+by either flag or paged by `--offset`.
 `--source` narrows to the last four kinds of run above only; it has no
 value for jobs, so a job's runs show up only when `--source` is left off.
 
@@ -335,8 +358,8 @@ camy tasks
 
 Lists tasks under a count of how many are open: a mark, a short id such
 as `tk_2b28`, the title, and the due date when one is set. An open task
-shows an open circle and a done task a check, unless its due date has
-passed. Then the row reads `overdue` and is marked `!`, done or not.
+shows an open circle and a done task a check. An open task whose due date
+has passed reads `overdue` and is marked `!`; a done task never does.
 
 ```bash
 camy tasks add "renew passport" --due 2026-11-01 --priority high
@@ -404,11 +427,22 @@ Lists connected accounts — calendar, mail, and similar providers — with a
 rollup of what each one knows: an email address, or an event or message
 count. When a sign-in has failed, the row reads `reconnect` and shows the
 error; mail and calendar are checked separately, so a Google or Microsoft
-account can show one of each.
+account can show one of each. An account that stopped working altogether
+reads `reconnect`, even with no error to show, rather than
+`not connected`. A Google or Microsoft account whose mail or calendar
+still works reads `reconnect` only when there's an error to show.
 
-Connected providers are listed first, then anything not connected. If your
-organization has disabled a provider, that's called out in a trailing
-line.
+Accounts that still work are listed first, including one whose mail or
+calendar half needs a reconnect. Then come accounts that stopped working
+entirely, then anything never connected. When accounts need reconnecting,
+the next step under the list names the first of them as
+`camy integrations connect` takes it, such as
+`camy integrations connect github`. For a Microsoft account that's
+`outlook` or `microsoft_calendar`, whichever sign-in broke, since mail and
+calendar are separate Microsoft sign-ins. For a Google account it's
+`google`, which means `gmail`, even when it's Google Calendar that broke,
+so it isn't sure to fix the calendar. If your organization has disabled a
+provider, that's called out in a trailing line.
 
 ```bash
 camy integrations health
@@ -419,7 +453,9 @@ A shallow check across every provider, or just one. Each row shows a
 status (healthy, unknown, not connected, or a warning), and whatever detail
 is available: a last error, when a token expires, or when the last sync
 happened. A provider you never connected reads `not connected`, not as a
-warning.
+warning. A tool server you added that is turned on is listed under its
+own name, or `app` and a short id when it has none. A paused one isn't
+listed.
 
 `google` and `microsoft`, the names `camy integrations` lists those
 accounts under, are read as `gmail` and `outlook`. Any other `PROVIDER` is
@@ -435,25 +471,39 @@ camy integrations connect github --no-browser
 
 Asks camy.ai for a sign-in link, opens it in your browser, and waits while
 you sign in on the provider's own page. The link has to be opened within
-the time it prints; the sign-in itself can take as long as it takes. When
-the provider reads connected:
+the time it prints; the sign-in itself can take as long as it takes. The
+wait ends when your sign-in lands: the account works, and it changed since
+before the link opened. Reconnecting an account whose old sign-in is still
+stored doesn't end the wait early. When your sign-in lands:
 
 ```text
 ✓ gmail connected
 ```
 
+If you sign in again to an account that was working but leave out some of
+what Camy asks for, the wait stops with
+`gmail signed in, but Camy needs more permissions`. Run
+`camy integrations connect gmail` again for a fresh link, and allow
+everything the sign-in asks for. On a first connect, a Google sign-in
+missing permissions leaves the account not connected, so the wait ends as
+it does when the link runs out.
+
 `PROVIDER` is a provider's own name: `gmail`, `google_calendar`,
 `outlook`, `microsoft_calendar`, `github`, `slack`, `zoom`, `twitter`,
 `facebook`, `instagram`, `oura`, `whoop`, or `tesla`, which is also what
-shell completion offers. `google` means `gmail`, since one Google sign-in
-covers mail and calendar; `microsoft` means `outlook`, Outlook mail, since
-Microsoft's calendar is a separate sign-in. A provider that doesn't connect
+shell completion offers. `google` means `gmail`, and `microsoft` means
+`outlook`, Outlook mail: each is the mail account's sign-in. Microsoft's
+calendar is a separate sign-in. A provider that doesn't connect
 from a terminal is a usage error pointing at camy.ai.
 
 The wait lasts up to six minutes; Ctrl-C stops waiting, and nothing is
 connected until you finish in the browser. If it runs out, the command says
 the account isn't connected yet and suggests running it again for a fresh
-link.
+link. If the account already worked and nothing about it changed, it says
+`gmail is connected` instead, since it can't tell whether your sign-in went
+through, and points at `camy integrations health gmail`. It says the same,
+without waiting further, when Camy couldn't read the account before the
+link opened and finds it working on its first look.
 
 | Flag | Effect |
 | --- | --- |
@@ -512,6 +562,9 @@ such as `dl_90ff`, the last response status code, `dead` or `replayed`,
 the event type, why it gave up, and when. These `dl_` ids are what
 `replay` takes; a delivery attempt from `deliveries` is not one.
 
+It shows the newest 200. When all 200 come back, a line under the list
+says `the newest 200 shown — there are more past these`.
+
 ### Test and replay
 
 ```bash
@@ -536,8 +589,10 @@ camy webhooks replay wh_a1b2 dl_90ff
 
 Re-enqueues one dead-lettered delivery under a fresh idempotency key, so
 it's retried as a new attempt rather than deduplicated against the failed
-one. The dead-letter id is resolved against that endpoint's dead letters;
-a short id that matches none is a usage error.
+one. A short dead-letter id is matched against that endpoint's newest
+200 dead letters only, and one that matches none is a usage error. For an
+older dead letter, pass the full id (36 characters), which skips the
+lookup.
 
 ### Endpoint and delivery ids
 

@@ -1,6 +1,6 @@
 ## camy inbox restore
 
-Bring it back to the inbox
+Bring archived or trashed mail back to the inbox
 
 ```
 camy inbox restore ID... [flags]

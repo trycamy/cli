@@ -2,6 +2,11 @@
 
 Resize the workspace in place — data survives; downgrades are refused server-side
 
+### Synopsis
+
+Resizes the workspace in place (stop → resize → start); the disk and its data
+survive. The GPU add-on stays as it is unless --gpu or --no-gpu says otherwise.
+
 ```
 camy vm resize SIZE [flags]
 ```
@@ -9,8 +14,9 @@ camy vm resize SIZE [flags]
 ### Options
 
 ```
-      --gpu    enable the GPU add-on with the resize
-  -h, --help   help for resize
+      --gpu      turn the GPU add-on on with the resize (default: keep it as it is)
+  -h, --help     help for resize
+      --no-gpu   turn the GPU add-on off with the resize
 ```
 
 ### Options inherited from parent commands

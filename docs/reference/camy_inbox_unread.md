@@ -1,23 +1,21 @@
-## camy connectors review
+## camy inbox unread
 
-See what a server changed since you approved it, and approve the changes
+Mark unread (provider write-through)
 
 ```
-camy connectors review NAME [flags]
+camy inbox unread ID... [flags]
 ```
 
 ### Examples
 
 ```
-  camy connectors review linear                # shows what changed, then asks
-  camy connectors review linear --yes --json   # approve without asking
+  camy inbox unread em_7f31 em_2a0c
 ```
 
 ### Options
 
 ```
-  -h, --help   help for review
-      --yes    approve the changes without asking — --json and --no-input approve only with this or --force
+  -h, --help   help for unread
 ```
 
 ### Options inherited from parent commands
@@ -49,5 +47,5 @@ camy connectors review NAME [flags]
 
 ### SEE ALSO
 
-* [camy connectors](camy_connectors.md)	 - Your connections — accounts, servers, and what each may do
+* [camy inbox](camy_inbox.md)	 - unified inbox — list, show, reply, undo
 

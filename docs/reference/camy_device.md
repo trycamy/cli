@@ -39,7 +39,7 @@ Link this computer to your Camy account and run as a resident agent
 
 * [camy](camy.md)	 - Camy in your terminal — the same agent, memory, and cloud computer you run at camy.ai
 * [camy device enroll](camy_device_enroll.md)	 - Link this Mac to your Camy account — zero capabilities until you grant one
-* [camy device forget](camy_device_forget.md)	 - Forget this Mac's link locally — its key, record and trail
+* [camy device forget](camy_device_forget.md)	 - Forget this Mac's link — its key, record and trail
 * [camy device install](camy_device_install.md)	 - Install the resident agent as a per-user LaunchAgent (macOS, from the Camy app)
 * [camy device logs](camy_device_logs.md)	 - The resident agent's own stdout/stderr
 * [camy device scope](camy_device_scope.md)	 - Grant, remove, or list what a linked computer may touch

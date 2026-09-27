@@ -82,11 +82,34 @@ camy: HTTP 400: That code is invalid or has expired. Request a new one.
 A validation refusal (HTTP 422) names the field it didn't accept, as in
 `camy: HTTP 422: email: Field required`. A few statuses read differently. A
 409 is the server's sentence alone, with no status. A 404 reads
-`not found: <sentence>`. A 403 that isn't a scope, plan or credit refusal
-reads `blocked at the edge or forbidden: <sentence>`, with the hint
+`not found: <sentence>`. A 403 that isn't a scope, key, plan or credit
+refusal reads `blocked at the edge or forbidden: <sentence>`, with the hint
 `if this persists it's us, not you`. If the sentence doesn't tell you
 what to change, include that request id in a bug report; see
 [Getting request IDs for support](#getting-request-ids-for-support).
+
+A server fault (HTTP 5xx) is exit 1 as well, with the hint `try again`. It
+reads `camy.ai had a problem`, followed by `(request <id>)` when the server
+tagged the request. When a 502, 503 or 504 carries the app's own sentence,
+such as `Couldn't reach the app.`, that sentence replaces the generic one.
+That copy applies unless a verb rewords it. On a custom app,
+[`camy connectors check`](reference/camy_connectors_check.md),
+[`resume`](reference/camy_connectors_resume.md) and the approval in
+[`review`](reference/camy_connectors_review.md) replace
+`camy.ai had a problem` with
+`couldn't finish reading <name>'s tools — camy.ai may not have reached it`,
+put the request id on its own line, and give the hint
+`camy connectors list shows <name>'s status · try again in a moment`.
+`camy inbox send` rewords its hint, below.
+
+A write that fails with a server fault, or on a connection that broke after
+the request went out, may still have gone through. Check before you retry
+it. [`camy inbox send`](reference/camy_inbox_send.md) says so in place of
+the retry hint: `check your Sent folder before retrying — it may have gone out`,
+or `check camy inbox outbox before retrying — it may already be queued` for
+a send scheduled with `--at`. When you gave no `--provider`, either one goes
+on with ` · if it didn't, retry with --provider gmail|outlook`. On the
+connection-failure card the same text is an `already sent?` row.
 
 ### Usage errors (exit 2)
 
@@ -113,6 +136,18 @@ $ camy inbox -L 500
 camy: --limit takes 1 to 200
 ```
 
+A chat message too long to send in one piece, over 64 KB, is refused
+before the message is sent. A one-shot `camy chat` refuses it before it
+opens the chat connection, with
+`that message is too long to send (<size>; the limit is 64 KB)` and the hint
+`save it to a file and send it with --attach`. Any `--attach` files, and a
+piped block camy uploaded for you, have gone up by then. In the REPL and the
+full-screen app the hint is `trim it — or save it to a file and attach that`.
+When camy.ai refuses the message itself, it reads
+`that message is too long to send`, with no size. A long block piped into
+`camy chat` is attached for you instead, except in a `--temp` chat; see
+[Stdin](scripting.md#stdin).
+
 A typo in the command name is a usage error as well, with a suggestion when
 one is close enough:
 
@@ -135,23 +170,60 @@ authenticates — a revoked key, an expired session. Run
 a headless run. See [Authentication](authentication.md).
 
 Those two lines are what you see when no key is stored. When the server
-turns down a stored key, a terminal draws a card titled `not signed in`
-instead. When camy has recorded an expiry for the stored key and that
-moment has passed, the same exit 3 draws a card titled
-`your sign-in expired`, with the message `your session expired <date>` and
-the fix `camy auth login`. The hint `camy auth login — one click renews it`
-appears only in the `--json` error object.
+turns down a stored key, a terminal draws a card instead, and the card says
+why when the server does:
+
+| Card title | Message | When |
+| --- | --- | --- |
+| `your sign-in expired` | `your session expired <date>` | camy recorded an expiry for the stored key, and that moment has passed |
+| `your sign-in expired` | `your key expired` | the server says the key expired, and camy has no past expiry on record for it |
+| `this key was revoked` | `this key was revoked — it no longer works` | the key was revoked, or rotated and its grace window has passed |
+| `not signed in` | `not signed in` | any other refusal of the key |
+
+Every one of them has `camy auth login` as its fix. On the two expiry cards
+the hint `camy auth login — one click renews it` appears only in the
+`--json` error object.
+
+That table applies to ordinary commands. On the chat connection, as in
+`camy chat`, `camy chat attach` and `camy approvals approve --wait`, a
+refused key draws `not signed in` whatever the reason, or
+`your sign-in expired` with `your session expired <date>` when camy recorded
+an expiry that has passed. The fix is still `camy auth login`.
+
+A 403 that refuses the key itself, rather than the request, is exit 3 too.
+It prints the server's own sentence, such as `Account is not active`, with a
+hint that says what does work. A terminal holding its computer's key
+instead of its own sign-in is told that `camy auth login` signs it in with
+its own.
+
+When camy.ai couldn't look the key up at all, that isn't a verdict on the
+key, and camy never reads it as one. A command exits 1 with the server's
+sentence or `camy.ai couldn't check your key just now`; a chat connection
+exits 7. Nothing about your key changed, so try again.
 
 ### Missing scope (exit 3)
 
 ```text
 camy: this key lacks a required scope
-      <detail> — mint one: camy auth login --scopes all
+      API key missing required scope(s): datasets:write — mint one: camy auth login --scopes +datasets:write
 ```
 
-The key is valid but wasn't granted the scope the command needs. Re-run
-`camy auth login --scopes all`, or a narrower `--scopes +the:scope` grant.
-See [Scopes](authentication.md#scopes).
+The key is valid but wasn't granted the scope the command needs. The hint
+starts with the server's sentence, then names the scope in the `--scopes`
+grammar: `+datasets:write` signs you in with the default scopes plus that
+one. When the server says any one of several scopes will do, the hint says
+`any one of them will do` and names the first. When it names no scope camy
+can read, the hint ends `mint a key that has it: camy auth login --scopes +<scope>`.
+`--scopes all` still grants every scope, if you want that instead.
+
+`workspace:exec`, which [`camy vm exec`](reference/camy_vm_exec.md) and
+[`camy vm shell`](reference/camy_vm_shell.md) need, is in the default set,
+so a plain `camy auth login` key has it. A key minted before the scope
+existed, or one minted without it on purpose, gets the refusal. That hint
+ends
+`run camy auth login to sign in again; the new key can run commands in your workspace`.
+`camy vm exec` reports the refusal as its own failure, exit 255. See
+[Scopes](authentication.md#scopes).
 
 ### Checkpoint pending, in a script (exit 4)
 
@@ -183,8 +255,27 @@ The API returned HTTP 429. `GET` requests already retry up to four times on
 your behalf with server-driven backoff before giving up. A write never
 retries automatically, so a 5 from one of those is yours to retry.
 
-When the server sends a `Retry-After`, the hint names the wait; otherwise it
-says `retry shortly`.
+When the server sends a `Retry-After`, as seconds or as a date, the hint
+names the wait; otherwise it says `retry shortly`. A `GET` retries on its
+own only while that wait is two minutes or less. A longer one ends the
+command at once instead of retrying into the same refusal, and the hint
+names the wait in minutes, hours or days, as in `retry in about an hour`.
+However large the value, camy gives up cleanly with exit 5.
+
+The chat connection has rate limits of its own, and they exit 5 as well.
+Your account can hold only so many open connections at once:
+
+```text
+camy: camy.ai has too many connections open for this account
+      close another camy or browser tab, or retry in a moment
+```
+
+A connection refused as it opens reads
+`the chat connection couldn't be opened`, with a hint that says why: too
+many chat connections, or connections from your network refused (HTTP
+403), usually a connection-rate limit. A message the server rate-limits,
+and a turn that can't start because every turn slot on the account stayed
+busy, exit 5 too.
 
 ### Plan or credits (exit 6)
 
@@ -215,6 +306,15 @@ A `camy chat` turn refused for credits is different: the server's own text
 appears in the turn, and the process exits 6 with no further error line and
 no `--json` error object. See [Exit codes](exit-codes.md#6--plan).
 
+When camy.ai holds the turn for a top-up instead of dropping it, a terminal
+draws a card headed `NOT ENOUGH CREDITS` after that text, never a question
+about resuming. It shows what you asked, how long the hold lasts when the
+server says, `add credits, then say continue`, and `camy.ai/p/plan` as the
+place to add them. A one-shot `camy chat` exits 6 on it. Under `--json` the
+hold arrives as a `resume_offer` event whose `stop_reason` is
+`credit_budget` or whose `ceiling_axis` is `wallet`; see
+[NDJSON for streams](scripting.md#ndjson-for-streams).
+
 ### Workspace asleep (exit 7)
 
 ```bash
@@ -226,13 +326,34 @@ sleeping workspace. Drop it to let the workspace wake normally, or start it
 yourself first with [`camy vm start`](reference/camy_vm_start.md). See
 [Workspace](workspace.md).
 
-With no workspace at all, `camy vm exec` exits 7 too, rather than creating
-one on your behalf:
+With no workspace at all, `camy vm exec` doesn't create one on your
+behalf. It counts that refusal as its own failure, so it exits 255, not 7:
 
 ```text
 camy: you don't have a workspace yet — exec won't create one
       camy vm provision makes one (camy vm sizes lists what it costs)
 ```
+
+### Chat service unavailable (exit 7)
+
+A chat connection that camy.ai can't serve right now exits 7, not 1:
+
+- The connection is refused as it opens because the chat service is down
+  (HTTP 502, 503 or 504): `the chat connection couldn't be opened`, with a
+  hint naming the status and `camy doctor`.
+- camy.ai couldn't take the connection or check your key just now:
+  `camy.ai couldn't take this connection just now` or
+  `camy.ai couldn't check your key just now`. Your key is fine.
+- camy.ai was restarting: `camy.ai is restarting`. For a new message camy
+  reconnects and resends up to three times first, but never resends a
+  message whose attached files the server had already taken; attach them
+  again and resend it yourself. An attach, as in `camy chat attach` or
+  `camy approvals approve --wait`, exits 7 straight away. A reconnect
+  refused for the key or for rate exits 3 or 5 instead.
+
+Retry in a moment. A chat that is already mid-turn is different: it exits
+1 with a hint to rejoin it with
+[`camy chat attach`](reference/camy_chat_attach.md).
 
 ### Denied (exit 8)
 
@@ -247,6 +368,14 @@ the turn that got told no, not to the act of saying no.
 One non-chat case shares the code. Declining the browser sign-in exits 8
 with `you denied the sign-in — nothing was granted`. See
 [Approvals](approvals.md).
+
+### Quit (exit 131)
+
+When camy gets SIGQUIT, which Ctrl-\\ sends from a terminal, it exits 131
+at once, with no error line and no JSON error object. If you are reporting
+a hang, set `CAMY_DEBUG_DUMP=1` before you reproduce it: SIGQUIT then prints
+Go's goroutine dump to stderr and exits 2. See
+[Exit codes](exit-codes.md#131--quit).
 
 ## Keychain unreachable and the 0600 fallback
 
@@ -473,9 +602,10 @@ camy --verbose --json status
 ```
 
 Request IDs do not come from `-v`. They arrive in the JSON error object with
-`--json`, inside a 5xx message as `camy.ai had a problem (request <id>)`,
-and as a last `request <id>` line under any other exit-1 error from a
-request the server tagged.
+`--json`, at the end of a 5xx message as `camy.ai had a problem (request <id>)`
+or `<the app's own sentence> (request <id>)` unless a verb rewords it, and
+as a last `request <id>` line under any other exit-1 error from a request
+the server tagged.
 
 That object carries `request_id` whenever the failing call was a REST
 request the server tagged with one. It is empty for errors that arrive over
