@@ -46,14 +46,28 @@ answers for you:
 - **A command you pre-trusted.** See [Trust](#trust).
 - **A pure read.** The CLI checks on its own, against its own copy of the
   read-only command table, that the command only reads and stays inside
-  your project root (`ls`, `git status`, `grep`, `sed -n`, a `describe-` or
-  `list-` call to `aws`, `gh pr view`, and similar). A command it verifies
-  this way runs without asking when camy.ai sends it with no card, or with a
-  card marked as a read on a turn it has marked eligible for auto-answering;
-  the CLI then answers the card and notes
+  your project root (`ls`, `git status`, `grep`, `sed -n`, most `describe-`
+  and `list-` calls to `aws`, `gh pr view`, and similar). It looks at the
+  command's options and arguments and at which program would actually run,
+  so a command that only looks read-only gets a card: one that could write
+  a file, start another program, reach outside the project, or hand back a
+  credential, and a program that isn't the system's own. A command it
+  verifies this way runs without asking when camy.ai sends it with no card,
+  or with a card marked as a read on a turn it has marked eligible for
+  auto-answering; the CLI then answers the card and notes
   `auto-approved — read-only — ran without asking` in the transcript.
   Otherwise you get an ordinary card, even for `ls`. Either way it runs on
   the CLI's own verdict, never on the server's say-so alone.
+
+A command that runs without asking at a terminal also runs without asking
+under `--no-input` and with no terminal attached, instead of stopping the
+turn with exit 4.
+
+A git read, such as `git status`, `git diff`, or `git log`, runs with the
+repository's own hooks, filters, external diff tools, and credential
+helpers turned off, whether it ran on its own or you approved its card. A
+diff comes back as plain text even if you use an external diff tool, and
+`git remote show` can't use your credential helper.
 
 `run_command` is killed if it outlives its timeout: two minutes unless the
 call asks for longer, and never more than 30 minutes. A longer request is
@@ -67,8 +81,13 @@ your machine for that session and asks camy.ai to stop the turn; when it
 stopped any, the line it prints says how many. Under `camy chat`, press
 `ctrl-c` twice within two seconds; a single `ctrl-c` detaches from the turn
 but waits for a running local command to finish, so its result still
-reaches the turn. Neither stops a background command; ask the agent to
-cancel it.
+reaches the turn. A command you stop still sends its result to camy.ai, so
+the turn isn't left waiting on it. Neither stops a background command; ask
+the agent to cancel it.
+
+In the transcript, each call on your machine shows as a trace line that
+names the file, search pattern, or command it acted on, and a call that
+failed says `failed:` and why.
 
 ### Writes and edits
 
@@ -77,6 +96,19 @@ and what to put in its place, and either every block applies or none does.
 Its approval card shows the diff the edit would make against the copy on
 disk, the same way a `write_file` card does; see
 [The approval card](approvals.md#the-approval-card).
+
+A rewrite keeps the file's own conventions: when every line break in the
+existing file is CRLF and the new content has none, it is written with
+CRLF, and a byte order mark the file starts with is kept. The card diffs
+the bytes that will land, so adding one line to a CRLF file shows as one
+added line. An edit whose search text matched only loosely, for example
+ignoring trailing whitespace, gives its new lines the line ending the
+replaced lines share and adds no stray blank line.
+
+A `write_file` that asks for a file mode camy can't read is refused before
+anything is written, rather than written with the default mode; a mode is
+an octal string such as `"0755"`. A mode that sets the setuid or setgid
+bit is refused too.
 
 Before `write_file` or `edit_file` replaces a file, camy keeps a copy of
 what was there, under your profile's state directory, never in your project
@@ -93,6 +125,10 @@ that is holding a live chat connection: the full-screen app,
 [`approvals approve --wait`](reference/camy_approvals_approve.md) or
 `approvals answer --wait` that re-joins a paused turn.
 
+With several camy sessions open on one account, each one runs local tools
+only for the chats it started or attached to, and for the chat on its
+screen. A request for any other chat is refused without running anything.
+
 There is no `camy local read` or `camy local run` — the CLI has no
 standalone way to invoke them directly.
 
@@ -101,8 +137,28 @@ standalone way to invoke them directly.
 The project root is the directory you launched `camy` from, with symlinks
 resolved. It never moves up to an enclosing repository. Everything the
 bridge can reach lives under that directory, so start `camy` in the project
-you want it to see: run it from your home directory and your home directory
-is the root. `camy local trust list` prints the root it resolved.
+you want it to see. `camy local trust list` prints the root it resolved.
+
+camy asks before it works in a folder that holds your shell's startup
+files or Camy's own settings: your home folder, any folder above it, a
+folder with a `.zshrc`, `.bashrc`, `.profile`, or similar of its own, or a
+folder that holds Camy's own config, state, or cache folder (for example
+`~/.config` or `~/.cache`). At a terminal it says what the folder holds and
+asks once per run, before the full-screen app draws its first screen:
+
+```text
+! ~ holds your shell's startup files and Camy's own settings — Camy could read or change them from here.
+Work in this folder anyway? [y/N]
+```
+
+In a folder that holds only Camy's own folders, such as `~/.config`, the
+line reads `~/.config holds Camy's own settings and sign-in key — Camy could
+read or change them from here.`
+
+Only `y` or `yes` goes ahead. Under `--no-input`, or with no terminal to
+ask on, camy says the folder holds them, so Camy is not touching this
+computer on this run, and the chat goes on without local tools. Start
+`camy` from a project folder to use them.
 
 When a chat connects, camy tells the agent where it is running, so the agent
 starts in the right place instead of hunting for the project with `pwd`,
@@ -126,7 +182,7 @@ invocation.
 |---|---|---|
 | `--no-local` | `CAMY_NO_LOCAL=1` | Disables the bridge entirely for this session. No read tools, no write tools — the agent cannot touch this machine at all. |
 | `--read-only` | `CAMY_LOCAL_READONLY=1` | Keeps the read tools; turns off `run_command`, `write_file`, and `edit_file`, and the background-job tools with them, for this session. |
-| `--sandbox off\|observe\|enforce` | `CAMY_LOCAL_SANDBOX` | How `run_command` is confined by the operating system, this session only. `observe` runs commands unconfined and reports that; `enforce` lets a command write only inside the project root, the system temp directory, and your user cache directory, through Seatbelt on macOS and bubblewrap on Linux, and falls back to `observe` where the sandbox tool is missing. Left unset, it is `observe` until 6 October 2026 (00:00 UTC) and `enforce` from then on wherever the OS can fully enforce it, as the flag's own help text says; see [The boundary, and the sandbox](#the-boundary-and-the-sandbox). `camy --version` prints the posture, and `camy --version --json` carries it as `local_sandbox`. |
+| `--sandbox off\|observe\|enforce` | `CAMY_LOCAL_SANDBOX` | How `run_command` is confined by the operating system, this session only. `observe` runs commands unconfined and reports that; `enforce` lets a command write only inside the project root, a temp directory, and your user cache directory, through Seatbelt on macOS and bubblewrap on Linux, and refuses to run a command on a machine that can't sandbox it. Left unset, it is `observe` until 6 October 2026 (00:00 UTC) and `enforce` from then on wherever the OS can fully enforce it, as the flag's own help text says; see [The boundary, and the sandbox](#the-boundary-and-the-sandbox). `camy --version` prints the posture on stderr, and `camy --version --json` carries it as `local_sandbox`. |
 | `--cloud` | `CAMY_CLOUD=1` | Defaults a plain turn to your workspace instead of this machine. Does **not** turn the bridge off — the tools stay available to the agent if it reaches for them — but it does stop `AGENTS.md`/`CLAUDE.md` discovery (see [Project instructions](#project-instructions)). |
 | `--no-project-instructions` | `CAMY_NO_PROJECT_INSTRUCTIONS=1` | Skips `AGENTS.md`/`CLAUDE.md` discovery, independent of `--cloud`. |
 
@@ -179,11 +235,13 @@ skipped, only the keystroke.
 
 **What `a` records.** Pressing `a` on a `run_command` card grants that exact
 command, never a prefix, in this project, and it appears in
-`camy local trust list` alongside the grants you added by hand. Beside it,
-`a` records a family grant for commands of the same shape: the same
-program, the same leading subcommands, and the same flags with the same
-values. Any other argument must be one you already approved, or a path
-inside the project.
+`camy local trust list` alongside the grants you added by hand. camy saves
+it once camy.ai accepts the approval; an approval camy.ai refuses saves no
+grant. Beside it, `a` records a family grant for commands of the same
+shape: the same program, the same leading subcommands, and the same flags
+with the same values. Any other argument must be one you already approved,
+or name something already in the project; a command whose new arguments
+don't gets a card.
 
 A family grant is dated: it lapses 24 hours after you last pressed `a` for
 that family, and drops off `camy local trust list` once it has. It answers a
@@ -214,7 +272,7 @@ camy local trust list --json
       "short_id": "gr_9f3a"
     }
   ],
-  "paths": null,
+  "paths": [],
   "root": "/Users/you/src/app"
 }
 ```
@@ -267,6 +325,10 @@ every row whose recorded argv equals the one you type. A family grant shows
 the last command you pressed `a` on for that family, so remove it by typing
 that argv; check `camy local trust list` first.
 
+A removal applies at once in every running camy session, including ones
+started before it. Each trust decision reads the store as it is on disk,
+so pressing `a` in an older session never brings a removed grant back.
+
 **What `add-path` does today.** It records a path for a future write
 carve-out. Writes still prompt every time in this release regardless of an
 `add-path` grant — only `run_command` can ever auto-run from a trust grant,
@@ -284,6 +346,8 @@ That exits 2, refusing to persist it. A script file's contents are invisible
 to any static check, so an invocation like `bash deploy.sh` or `python3
 manage.py migrate` can never be granted "always allow" either — it runs on
 an interactive approval every time, never silently from a stale grant.
+Running a module, as in `python3 -m unittest`, is a runner like `go test`
+and `npm test`, and can be trusted.
 
 ## Read-only scope
 
@@ -295,23 +359,35 @@ below. Within that boundary:
 - `read_file` refuses a directory target, and refuses anything that isn't a
   regular file. One call returns up to 200 KB by default and never more
   than 1 MB; a larger file is read in pages, from a byte offset or as a
-  stretch of lines, and a negative start line counts back from the end.
+  stretch of lines, and a negative start line counts back from the end. A
+  single line longer than one page, such as a minified bundle's, comes back
+  a page at a time, marked truncated, with the offset to read on from.
 - `list_dir` lists one directory, or walks up to eight levels below it with
   an include or exclude glob (`**/*.tsx`) to find files by name. It caps
   the number of entries it returns at 1,000.
-- `grep` skips any single file above 5 MB. An invalid regular expression is
-  refused.
+- `grep` skips any single file above 5 MB, and finds matches on any line
+  within that, however long. Each matched line's text is cut to 2,000
+  bytes and ends in `…`. An invalid regular expression is refused.
 - A `grep` or a `list_dir` walk skips common build, dependency, and cache
   directories (`.git`, `node_modules`, `vendor`, `.venv`, `dist`, `build`,
   `.cache`, `.pytest_cache`, and similar), and skips hidden directories
   other than `.github`, `.circleci`, and `.claude` unless the call asks to
-  include them.
+  include them. The result names the folders it skipped, up to 25 with a
+  count of the rest (`.git` is never named), so the agent knows what it
+  didn't search. A search or listing that starts inside such a folder,
+  such as a path under `vendor/`, covers that whole folder; `.git` is
+  always skipped.
+- A search with no matches, or a recursive listing that finds nothing,
+  comes back to the agent as an empty result, not as a failed call.
 
-Any line that looks like a secret — an AWS secret key pattern, a
-`-----BEGIN ... KEY-----` block — is redacted before it reaches the agent,
-even inside a file the denylist did not refuse. This applies to `read_file`
-content (every page of it), `grep` match text, and the captured output of
-`run_command` and of background commands alike.
+Secrets in what the tools return are masked before they reach the agent,
+even inside a file the denylist did not refuse. A line that sets an AWS
+secret key, or the line that opens a private key (`-----BEGIN ... KEY-----`),
+is replaced whole, and a token or password inside an ordinary line, such as a password in a URL or
+a well-known API token, is replaced in place with `«redacted»`, keeping the
+rest of the line. This applies to `read_file` content (every page of it),
+`grep` match text, and the captured output of `run_command` and of
+background commands alike.
 
 ## The secret-path denylist
 
@@ -327,12 +403,18 @@ read-refused.
 | Category | Paths |
 |---|---|
 | Credential and key directories | `.ssh/`, `.aws/`, `.gnupg/`, `.kube/`, `.docker/`, and directories named `secrets`, `credentials`, `certs` |
-| Specific credential files | `.env` and `.env.*`, `.netrc`, `.npmrc`, `.git-credentials`, `.pypirc`, `.pgpass`, `.dockercfg`, `.htpasswd`, `.s3cfg`, `.aws/credentials`, and `.git/config` — only that file, not the whole `.git` tree. The committed-safe siblings `.env.example`, `.env.sample`, `.env.template`, `.env.dist`, and `.env.defaults` are exempt. |
+| Specific credential files | `.env` and every other dotenv-style secrets file, `.netrc`, `.npmrc`, `.git-credentials`, `.pypirc`, `.pgpass`, `.dockercfg`, `.htpasswd`, `.s3cfg`, `.aws/credentials`, and the config files git reads inside a `.git` folder — only those, not the whole `.git` tree. The committed-safe siblings `.env.example`, `.env.sample`, `.env.template`, `.env.dist`, and `.env.defaults` are exempt. |
 | Private keys | By name or extension: `id_*`, `*_rsa`, `*_ed25519`, `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `.ppk`. A public key (`*.pub`) is exempt — it is not a secret. |
 | Secret-sounding data files | A narrower fuzzy match on ordinary data files whose name merely contains `secret`, `credential`, or `passwd` — but not on common source or doc file extensions, so `src/credentials.ts` and `docs/secrets.md` are not blocked by this rule alone. |
-| macOS and browser credential stores | Keychain files, cookie stores, the Messages and Mail folders, the browser profile folders of Chrome, Firefox, Edge, Brave, and Vivaldi, Safari's cookie store, and browser password and autofill databases wherever they sit (`Login Data`, `Web Data`, `key4.db`, `logins.json`, and similar) |
+| macOS and browser credential stores | Keychain files, cookie stores, the Messages and Mail folders, the browser profile folders of Chrome, Firefox, Edge, Brave, Vivaldi, and other browsers, Safari's cookie store, and browser password and autofill databases wherever they sit (`Login Data`, `Web Data`, `key4.db`, `logins.json`, and similar). These match whole folder and file names, so a project folder such as `Web Data Pipeline/` is not refused. |
+| Other credential stores | Password managers and keyrings, the sign-in stores of cloud, deploy, and package-registry command-line tools, coding assistants' credential files, and shell and REPL histories |
 | System credential files | `/etc/shadow`, `/etc/gshadow`, `/etc/sudoers` |
-| camy's own state directory | Everything under it, across every profile: the trust store, the stored credential fallback file, and the copies kept of files a write replaced. Unreadable by the bridge's own tools |
+| camy's own directories | Its config, state, and cache directories, across every profile: the settings camy acts on, the trust store, the stored credential fallback file, and the copies kept of files a write replaced. Unreadable by the bridge's own tools |
+
+The denylist is checked from your home folder as well as from the project
+root, so a credential store stays refused even when you start `camy`
+inside the folder that holds it, such as `~/.kube`. A `grep` or
+`list_dir` walk skips these paths and never walks into such a folder.
 
 `run_command`'s arguments other than its working directory are not
 re-resolved against the boundary once you approve the command — the argv
@@ -359,7 +441,7 @@ refuses:
 - `rm -rf` (or equivalent flag combinations) against a root-ish target —
   `/`, `~`, `$HOME`, a bare `.` or `..`, a whole top-level home subfolder,
   or no target at all
-- `git push --force` (and `-f`, `--force-with-lease`) and several other git
+- `git push` in any form that force-updates a remote, and several other git
   shapes that inject configuration or a remote helper
 - `mkfs`, `diskutil erase`, `dd of=/dev/*`
 - `chmod -R 777` against a root-ish target
@@ -378,8 +460,10 @@ refuses:
 - a read of a Mail, Messages, cookie, or browser credential store through
   `sqlite3`, `plutil`, `strings`, or `defaults`
   (`defaults read com.apple.mail`, `defaults read -app Safari`, and similar)
-- a wrapper — `env`, `nice`, `timeout`, `xargs`, and similar — around any of
-  the above; the guard looks through the wrapper to the command it runs
+- a wrapper — `env`, `nice`, `timeout`, `xargs`, and similar — or a shell
+  script around any of the above, however it is written; the guard looks
+  through to the command that runs, and refuses a script it can't read
+  with confidence
 
 This floor is consulted at every point where a command could gain the right
 to run, all of them on this machine: when a command is about to run, when a
@@ -409,24 +493,50 @@ container.
 
 `--sandbox enforce` (or `CAMY_LOCAL_SANDBOX=enforce`) adds an operating
 system boundary on top, through Seatbelt on macOS and bubblewrap (`bwrap`,
-which must be installed) on Linux. Under `enforce` a command can write only
-inside the project root, the system temp directory, and your user cache
-directory. On macOS it also cannot reach container-runtime sockets (Docker,
-Podman, Colima). Other reads and network access are not confined. `observe`
-leaves commands unconfined.
+installed system-wide) on Linux. Under `enforce` a command can write only
+inside the project root, a temp directory, and your user cache directory.
 
-`enforce` falls back to `observe` when the sandbox tool is missing:
-`sandbox-exec` on macOS, `bwrap` on Linux. On macOS `camy --version` names
-the reason; on Linux it does not. On Linux camy counts a machine as able to
-enforce whenever `bwrap` is installed, so if `bwrap` is present but cannot
-run, for example because unprivileged user namespaces are disabled, commands
-under `enforce` fail rather than run unconfined.
+- On macOS the temp directory is the system's. A command can still write to
+  `/dev/null`, the terminal, and its own output streams, so `cmd
+  2>/dev/null` works. It cannot reach container-runtime sockets (Docker,
+  Colima), and it cannot open or script other apps. Reads and
+  network access are not confined.
+- On Linux each command gets its own empty `/tmp` and runtime folder
+  instead of the system's. It cannot reach other local services, such as
+  the container daemon, the session bus, or the ssh and gpg agents, and it
+  has no network access, except when the command itself is a program that
+  fetches code or packages or connects to another machine (`git`, `npm`,
+  `pip`, `go`, `curl`, `ssh`, `rsync`, and the like). Every other command
+  runs offline, including a wrapper such as `sh -c "npm ci"`. Reads are not
+  confined.
 
-`camy --version` prints the posture in effect, and `camy --version --json`
-carries it as `local_sandbox`. A command card states it only once per
-connection, so the first command card you actually see may not carry it if
-an earlier one was answered for you. `camy --version` is the dependable
-place to read it.
+`observe` leaves commands unconfined.
+
+An unset dial counts as `enforce` only where this machine can fully
+enforce it. On macOS that takes `sandbox-exec`. On Linux it takes a `bwrap`
+installed for the whole system, such as your distribution's package, that
+can really start a sandbox: camy checks that it starts before relying on
+it, so a machine where unprivileged user namespaces are restricted stays at
+`observe` rather than failing every command. A `bwrap` installed only in
+your home folder, for example under `~/.local/bin` or by Linuxbrew, is not
+used; install the system package to keep the sandbox. On macOS,
+`camy --version` names why the sandbox is unavailable only when you ask for
+`enforce` explicitly (`--sandbox enforce` or `CAMY_LOCAL_SANDBOX=enforce`).
+With the dial unset it prints the generic "No OS sandbox is in effect" line.
+On either OS, `camy --version --json` reports `enforcement` as
+`unavailable`.
+
+An explicit `--sandbox enforce` or `CAMY_LOCAL_SANDBOX=enforce` on a
+machine that can't sandbox a command refuses the command rather than run it
+unconfined, and the refusal says this machine cannot contain a command, and
+why. Install the sandbox tool, or pass `--sandbox observe` to run commands
+unconfined.
+
+`camy --version` prints the posture in effect on stderr, under the version
+line, and `camy --version --json` carries it as `local_sandbox`. A command
+card states it only once per connection, so the first command card you
+actually see may not carry it if an earlier one was answered for you.
+`camy --version` is the dependable place to read it.
 
 Left unset, the dial is `observe` until 6 October 2026 (00:00 UTC). From
 that date an unset dial means `enforce` on any machine that can fully
@@ -436,13 +546,33 @@ pages that list it, give the same date. Nothing camy.ai sends can move the
 dial toward `off`, and an explicit `--sandbox observe` or
 `CAMY_LOCAL_SANDBOX=observe` always stays `observe`.
 
-The CLI never answers a card for you that asks to loosen the sandbox for a
-command `enforce` blocked, whether by letting it write to more paths or by
-running it unconfined once, even for a command you trusted or one that only
-reads. That rule covers the card only. The widening itself arrives from
-camy.ai with the command when it runs, and the CLI does not tie it to the
-card you answered. The CLI does drop any widening that names `/`, your home
-directory, or a secret-shaped path.
+When `enforce` stops a command, camy.ai can ask again with a card that
+loosens the sandbox for that one run: either letting it write to more
+folders, or running it outside the sandbox. The card says so in an amber
+line under the command:
+
+```text
+the sandbox also lets it write to ~/.npm
+runs outside the sandbox: it can change any file you can and reach any site
+```
+
+A run outside the sandbox is approved only by typing the word:
+
+```text
+run it outside the sandbox? type outside to approve, anything else to refuse
+```
+
+`outside`, in any case, approves; `y`, `a`, and an empty line refuse, and
+no `a` grant is offered. A run that only gains folders keeps the usual
+`y`/`N`/`a` prompt.
+
+The CLI never answers such a card for you, even for a command you trusted
+or one that only reads. A widening applies only when the card you approved
+showed it: a command approved any other way, with
+`camy approvals approve --wait` or answered for you, runs inside the
+sandbox. The CLI drops any widening that names `/`, your home folder or a
+folder above it, a top-level system folder, a folder that holds the
+project, or a secret-shaped path.
 
 A command can also be started in the background: it keeps running after
 the turn that started it ends, and the approval card says so before you
@@ -470,6 +600,12 @@ which one it followed. At the project root `AGENTS.md` is preferred and
 checked, not subdirectories, and the files are capped at 16 KB together,
 with your personal file trimmed first.
 
+camy.ai accepts an opening message of up to 64 KB. When the project's
+instructions and folder details would make it larger, camy leaves out
+context until it fits: first the list of top-level names, then the end of
+the instructions, then the rest of where it is running. Your tools,
+sign-in, and sandbox posture are never left out.
+
 Discovery fails closed rather than take a risk: a symlink — even one that
 points back inside the project — or a hard-linked file is refused rather
 than read. When a file is read, the CLI discloses it once per process, on
@@ -494,11 +630,11 @@ On that connection:
   turn's default workspace is local or cloud.
 - Unless the turn defaults to the cloud (`--cloud`), it also says where it
   is running: the project root; when that sits in a git repository, the
-  repository's root, branch, `origin` remote with any embedded credential
-  removed, and whether the tree has uncommitted or untracked changes; the
-  operating system, CPU architecture, and shell name; and the names of up to
-  40 entries at the top of the project root. Names only, never file
-  contents.
+  repository's root, branch, and `origin` remote with any embedded
+  credential removed, which camy reads from the repository's own files
+  without running any program; the operating system, CPU architecture, and
+  shell name; and the names of up to 40 entries at the top of the project
+  root. Names only, never file contents.
 - On the same terms it reports this machine's sandbox posture (the dial,
   and whether the OS can enforce it). Whether it keeps copies of what a
   write replaces is reported on every session that has the write tools,
@@ -520,13 +656,26 @@ On that connection:
   a read-only command the CLI's own check, before the CLI will run it.
 
 A write or command call the server sends is refused unless it matches
-something this CLI process itself witnessed being approved: your own `y` or
-`a` on a card, a trust-store auto-run, a read-only command the CLI verified
-itself (with or without a card), `camy approvals approve --wait`, or a live
-re-confirm dialog for an approval made in a different open session.
+something this CLI process itself witnessed being approved: your own `y`,
+`a`, or `outside` on a card, a trust-store auto-run, a read-only command the
+CLI verified itself (with or without a card),
+`camy approvals approve --wait`, or a live re-confirm dialog for an
+approval made in a different open session. An approval covers only the
+exact command, folder, file mode, and job the card showed.
 
 A server that skips straight to requesting a tool call, without a real
 approval behind it, is refused here rather than merely delayed.
+
+Offering local tools takes a key with the `bridge:register` scope, which
+`camy auth login` asks for. A key from an earlier `camy auth login` still
+works, so you don't need to sign in again. If camy.ai says your key can't
+offer local tools, camy says so once per run, in camy.ai's words or as:
+
+```text
+This API key can't register local tools. Run camy auth login to sign in with a key that can.
+```
+
+The chat then goes on without local tools.
 
 [Approvals](approvals.md) owns the approval model itself: how a card is
 presented, what `y`, `a`, and `n` do, the 120-second timeout, and headless

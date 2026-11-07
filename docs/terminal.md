@@ -14,9 +14,11 @@ names what this terminal does and doesn't support.
 camy doctor
 ```
 
-Machine output (`--json`, `--jq`, or `--template`) is never affected by any
-of this. It is always plain, unstyled data. See [Scripting with
-camy](scripting.md).
+Machine output (`--json`, `--jq`, or `--template`) is always plain,
+unstyled data. When machine output prints to a terminal, camy strips
+terminal control sequences from `--jq` and `--template` output and escapes
+them inside `--json` strings. Output sent to a pipe or a file is unchanged,
+byte for byte. See [Scripting with camy](scripting.md).
 
 ## Color
 
@@ -57,14 +59,13 @@ config is accepted and ignored, so use `--color always` (or `FORCE_COLOR`)
 to force color on. An explicit `--color always`/`--color never` wins over
 the config key. See [camy config](reference/camy_config.md).
 
-Forcing color on cannot invent a rung out of `TERM` alone — the rung still
-comes from the table above. `COLORTERM=truecolor` (or `24bit`) is read
-first, so it yields truecolor even with `TERM` unset.
-
-With no `COLORTERM` and no usable `TERM`, `--color always`, `FORCE_COLOR`,
-and `CLICOLOR_FORCE` all still produce plain output. Set `TERM` as well —
-`TERM=xterm-256color`, say — when you want color in a `TERM`-less
-environment such as a CI job or cron.
+Forcing color on still takes its rung from the table above, with one
+difference: where the table gives no color because `TERM` is unset or
+empty, `--color always`, `FORCE_COLOR`, and `CLICOLOR_FORCE` give 16
+colors. `COLORTERM=truecolor` (or `24bit`) is read first, so it yields
+truecolor even with `TERM` unset. Set `TERM` as well (`TERM=xterm-256color`,
+say) when you want more than 16 colors in a `TERM`-less environment such as
+a CI job or cron.
 
 Under `TERM=dumb`, `FORCE_COLOR` and `CLICOLOR_FORCE` are overruled
 outright by step 1 above; only `--color always` gets as far as the rung
@@ -95,7 +96,8 @@ Accessible mode also turns off:
 - the pager (long output prints straight through instead)
 - inline images
 - the full-screen app — bare `camy` in an accessible terminal runs the
-  plain-line REPL instead
+  plain-line REPL instead. Ctrl-C or Ctrl-D at its prompt leaves it the
+  way `/quit` does, with the goodbye line.
 
 Glyphs degrade too, to the ASCII fallbacks below.
 
@@ -139,10 +141,15 @@ CAMY_GROUND=light camy status
 
 The palette has two grounds. `camy` picks one in order: `--ground`, then
 `CAMY_GROUND`, then the `COLORFGBG` variable some terminals export, then
-— on a real terminal, outside `tmux`, `screen` and CI — a 120 ms query of
-the terminal's own background colour (OSC 11), and finally dark. A light
+— on a real terminal, outside `tmux`, `screen` and CI, and not from a
+background job such as `camy status &` — a 120 ms query of the terminal's
+own background colour (OSC 11), and finally dark. A light
 terminal gets colours measured for a white ground; the accent stays the
 same. `camy doctor`'s `render` row names the ground it chose.
+
+A terminal that never answers colour queries, such as one opened by
+`docker run -t` or `ssh -tt` from a script, costs a command no more than
+that 120 ms wait.
 
 ## The full-screen app and `--inline`
 
@@ -156,6 +163,12 @@ the session prints stays in your terminal's history.
 
 `--accessible` always wins over both: an accessible terminal gets the
 plain-line REPL regardless of `--inline`.
+
+Started in your home folder, or in a folder that holds your shell's
+startup files or Camy's own settings, the app (full-screen or `--inline`)
+asks whether to work in that folder before it draws its first screen, and
+remembers your answer for the session. See
+[The project root](local-bridge.md#the-project-root).
 
 ## Paging
 
@@ -197,8 +210,11 @@ url`](reference/camy_vm_url.md). The visible text stays the plain URL, so a
 wrong guess costs nothing: you still see it and can copy it.
 
 Markdown links inside agent prose and feed bodies are the one exception.
-There the link text stays the label, and when the terminal isn't recognized
-the URL is printed after it in parentheses.
+There the link text stays the label, and when hyperlinks are off (the
+terminal isn't recognized, or color is off) the URL is printed after it in
+parentheses: `label (url)`. A link inside a `>` quote always prints as
+`label (url)`. A link whose label names a different address from the one
+it opens is never made clickable: it prints as `label (address)` too.
 
 `camy` recognizes:
 
@@ -207,7 +223,12 @@ the URL is printed after it in parentheses.
 - a non-empty `VTE_VERSION` (VTE-based terminals)
 - a non-empty `WT_SESSION` (Windows Terminal)
 
-Hyperlinks are off in accessible mode and whenever stdout isn't a terminal.
+Hyperlinks are off in accessible mode, whenever stdout isn't a terminal,
+and whenever color is off (`NO_COLOR`, `CLICOLOR=0`, `--color never`, or a
+terminal with no color rung).
+
+A link in a table cell that has to be shortened to fit its column stays
+clickable, and keeps its styling up to the `…`.
 
 ## Inline images
 
@@ -260,6 +281,14 @@ Below 60 columns every list stacks: the first and last cells on one line,
 the rest beneath. Nothing is squeezed — the least important column is
 dropped first, and a measured value is never truncated to make room.
 Widening `COLUMNS` past the caps changes nothing but the margin.
+
+In a table inside a reply, a cell too wide for its column is shortened
+with `…`, and the columns after it stay aligned even when the cut falls
+next to a wide character, such as an emoji.
+
+The full-screen app measures again when you resize the window and lays the
+transcript out at the new width, so narrowing the window wraps lines and
+tables instead of cutting off their ends.
 
 ## What `camy doctor` reports
 

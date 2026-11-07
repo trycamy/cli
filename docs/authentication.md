@@ -152,7 +152,8 @@ two minutes: the Mac stays linked and can do nothing until you add a grant
 with [`camy device scope add`](device.md#grant-and-remove-scopes) or in
 Settings. camy doesn't offer the card when you run it from your home folder
 or from `/`. If you deny the sign-in, cancel it, or let the code expire,
-nothing is linked either.
+nothing is linked either. Ctrl-C while camy waits for your approval also
+removes the signing key it had started to make for this Mac.
 
 camy signs in without linking, and says nothing about linking, when:
 
@@ -224,6 +225,20 @@ Like the browser sign-in's key, the key a `--code` sign-in mints is marked
 as this terminal's sign-in key, which is the only kind of key
 `camy vm logout-everywhere` runs with.
 
+If your account is scheduled for deletion, the sign-in stops right after you
+enter the emailed code (and the authenticator code, if your account asks for
+one), before camy asks for the fresh check, and no key is minted. camy says
+when, in your local time, and how to cancel (exit 3):
+
+```text
+camy: Your account is scheduled for deletion on January 2, 2027 at 3:04 PM.
+      To cancel, sign in at camy.ai and choose Cancel deletion.
+```
+
+When camy.ai gives no date, the first line is
+`Your account is scheduled for deletion.` camy has no command that cancels
+the deletion; do it on camy.ai.
+
 Accounts whose only second factor is a passkey (WebAuthn) can't complete a
 code sign-in from the terminal — camy detects this and points you at creating
 a key at `https://camy.ai/p/settings/developer` and signing in with
@@ -243,6 +258,17 @@ that it looks like a camy key (`camy_live_…` or `camy_test_…`) before storin
 it.
 This is the way to install a key that was created elsewhere — for example
 one shown once by `camy keys rotate`.
+
+camy then checks the key with camy.ai before it replaces the key this
+profile holds. If the check fails, because the key is mistyped, revoked, or
+expired, or camy can't reach camy.ai, camy stores nothing and you stay
+signed in with the key you had. For each of these, camy shows its
+[diagnosis card](exit-codes.md#diagnosis-cards) for that failure, with the
+message starting
+`that key fails to authenticate, so it was not stored (this profile keeps its current key):`.
+The exit code is the check's own: 3 for a key camy.ai refuses, 1 when camy
+can't reach camy.ai. With `--json`, the error object's `hint` names
+`https://camy.ai/p/settings/developer` as the place to copy the key again.
 
 There is no `--api-key` flag on any command, by design. Pasting or setting a
 key always goes through one of `auth login --with-key` or the
@@ -270,9 +296,11 @@ with, and camy reads them back from your key list.
 
 The two list forms can't be mixed: `--scopes +files:read,chat:read` is a
 usage error (`don't mix a bare scope list with +/- adjustments`). Any scope
-the server doesn't register is rejected as `unknown scope` when you add it
-(`+scope`) or name it in a bare list. A `-scope` removal isn't checked — a
-name that isn't in the set is silently ignored.
+the server doesn't register is rejected as `unknown scope` (exit 2) when you
+add it (`+scope`) or name it in a bare list. A `-scope` removal is checked
+too: a name camy doesn't recognize, such as a misspelling, is rejected the
+same way instead of leaving the whole default set in place. Removing a
+known scope that isn't in the set does nothing.
 
 When camy can't fetch the server's list of scopes (you're offline, the
 server is older, or its answer is malformed), it uses its own compiled-in
@@ -296,13 +324,32 @@ camy: device:link isn't a scope for this terminal's key — it belongs to this M
 | `memory:write` | Writing stored memory | |
 | `files:read` | Reading files in your workspace | |
 | `files:write` | Writing files in your workspace | |
-| `integrations:read` | Reading integration status | |
-| `integrations:write` | Managing integrations | |
-| `deploys:write` | Publishing sites from Canvas | |
+| `mail:read` | Reading your inbox, threads, and sweep state | ✓ |
+| `mail:write` | Sending, replying to, archiving, and sweeping mail | ✓ |
+| `calendar:read` | Reading calendars and events | |
+| `calendar:write` | Creating and changing calendar events | |
+| `agents:read` | Reading your agents and their runs | ✓ |
+| `agents:write` | Creating, running, and steering agents | ✓ |
+| `devices:read` | Reading your linked computers, their ledgers, and their rules | ✓ |
+| `devices:write` | Managing your linked computers | ✓ |
+| `computer:read` | Reading your cloud computer and its sessions | ✓ |
+| `computer:write` | Starting, stopping, and steering your cloud computer | ✓ |
+| `phone:read` | Reading your calls and their transcripts | ✓ |
+| `phone:write` | Acting on your calls and voice settings | |
+| `account:read` | Reading your account, preferences, and usage | ✓ |
+| `account:write` | Changing your account and preferences | |
+| `apps:read` | Reading your published apps | |
+| `apps:write` | Building and publishing apps | |
+| `integrations:read` | Reading integration status | ✓ |
+| `integrations:write` | Managing integrations | ✓ |
+| `deploys:read` | Reading your published sites | ✓ |
+| `deploys:write` | Publishing sites from Canvas | ✓ |
+| `jobs:read` | Reading jobs and runs | ✓ |
 | `jobs:write` | Creating and managing jobs | ✓ |
+| `tasks:read` | Reading tasks and schedules | ✓ |
 | `tasks:write` | Creating and managing tasks | ✓ |
-| `webhooks:read` | Reading webhook config and deliveries | |
-| `webhooks:write` | Managing webhooks | |
+| `webhooks:read` | Reading webhook config and deliveries | ✓ |
+| `webhooks:write` | Managing webhooks | ✓ |
 | `datasets:read` | Reading datasets | |
 | `datasets:write` | Writing datasets | |
 | `data:read` | Reading inbox and feed data | ✓ |
@@ -311,8 +358,12 @@ camy: device:link isn't a scope for this terminal's key — it belongs to this M
 | `data:actions:append_memory` | Appending to memory as a card action | |
 | `data:actions:append_dataset` | Appending to a dataset as a card action | |
 | `capture:write` | [`camy capture`](reference/camy_capture.md) | ✓ |
+| `capture:read` | Reading your captures | |
 | `keys:manage` | `camy keys` self-management | ✓ |
 | `workspace:exec` | Running commands in your cloud workspace: [`camy vm exec`](reference/camy_vm_exec.md) and [`camy vm shell`](reference/camy_vm_shell.md) | ✓ |
+| `bridge:register` | Letting this terminal offer Camy its local tools; see [The local bridge](local-bridge.md) | ✓ |
+
+camy asks for a default scope only when the server registers it.
 
 The server also registers `proactive:write`, `github:write`,
 `history:read`, `secrets:read`, and `secrets:write`, none of which a `camy`
@@ -325,10 +376,26 @@ most keys should be.
 When a command is refused because the key lacks a scope, camy says
 `this key lacks a required scope` (exit 3, except `camy vm exec`, which
 exits 255), and the hint names the sign-in that adds it, such as
-`camy auth login --scopes +datasets:write`. `workspace:exec` is in the
+`camy auth login --scopes +datasets:write`. A chat whose key lacks
+`chat:read` stops at once with the same message and a hint naming
+`camy auth login --scopes +chat:read`, instead of trying to reconnect.
+`workspace:exec` is in the
 default set, but a key minted before it joined doesn't have it, so
 `camy vm exec` and `camy vm shell` refuse that key; the hint then tells you
-to run `camy auth login` to sign in again.
+to run `camy auth login` to sign in again. `camy auth status` and
+`camy doctor` warn you before you run into it:
+`this key can't run commands on your cloud computer; run camy auth login to add that`.
+
+**After you update to 1.0.6, run `camy auth login` again.** The default set
+now carries the scopes camy's mail, agent, device, computer, site,
+connector, webhook, call, and account commands need. A key from an earlier
+sign-in keeps the scopes it was minted with, and camy.ai can refuse those
+commands for it with `this key lacks a required scope`.
+
+A key from an earlier `camy auth login` still offers local tools without
+`bridge:register`. When camy.ai won't let a key offer them, the session goes
+on without local tools, and camy says so once, in camy.ai's words, or with
+`This API key can't register local tools. Run camy auth login to sign in with a key that can.`
 
 ## Signing in again
 
@@ -402,6 +469,27 @@ or the stored key rejected) fails the command; a rejected key marks the
 [`camy doctor`](reference/camy_doctor.md) and
 [Troubleshooting](troubleshooting.md).
 
+### The Camy a key belongs to
+
+A key camy stores when you sign in is tied to the `api_url` you signed in
+at, and camy sends it nowhere else. Pointed at another address, camy sends
+nothing and stops with `your stored key was issued for <address>` (exit 2).
+To use a different Camy, sign in there with `camy auth login --api-url <url>`.
+
+A key from [`CAMY_API_KEY`](#camy_api_key), or one stored by an earlier
+version of camy, isn't tied to an address. **If `config.toml` or a profile
+points `api_url` somewhere other than `https://api.camy.ai` or an address on
+this machine, sign in again at that address after you update:**
+
+```bash
+camy auth login --api-url https://camy.example.com
+```
+
+Until you do, camy doesn't send the older key there and stops with
+`this key was never tied to a Camy, so it is only sent to https://api.camy.ai — and the api_url in your config points at <url>`
+(exit 2). With `CAMY_API_KEY`, pass `--api-url` or set `CAMY_API_URL` on
+each command instead. See [Configuration](configuration.md) for `api_url`.
+
 ## `camy auth status`
 
 ```bash
@@ -409,15 +497,21 @@ camy auth status
 ```
 
 Shows who you're signed in as, the first 12 characters of the key, where it
-came from, your `api_url`, and your active profile:
+came from, your `api_url`, your active profile, and how many scopes the key
+holds:
 
 ```text
-✓ <name or email> · key <prefix>… · source: profile default · https://api.camy.ai · profile default
+✓ <name or email> · key <prefix>… · source: profile default · https://api.camy.ai · profile default · <n> scopes
 ```
 
 `camy auth status` verifies the key against the account endpoint, so it
 needs the network; when a key expiry is on record the line ends with
-`· expires Oct 4`.
+`· expires Oct 4`. The scope count comes from the key's own entry in your
+key list, or else from the scopes your last sign-in stored; when camy knows
+neither, the segment is left out. When the key lacks the scope that
+`camy vm exec` and `camy vm shell` need, and camy.ai offers that scope, a
+second line on stderr says
+`this key can't run commands on your cloud computer; run camy auth login to add that`.
 
 The `source` field names the credential: `env` when
 [`CAMY_API_KEY`](#camy_api_key) supplied the key, or `profile <name>`
@@ -431,13 +525,29 @@ shape, indented and with its keys sorted alphabetically:
   "key_prefix": "<prefix>…",
   "key_source": "keychain",
   "profile": "default",
-  "user": { "...": "..." }
+  "scopes": [
+    "chat:read",
+    "chat:write"
+  ],
+  "user": {
+    "email": "<email>",
+    "full_name": "<name>",
+    "id": "<id>",
+    "role": "<role>",
+    "username": "<username>"
+  }
 }
 ```
 
 The two are not the same vocabulary: the human line's `source:` is `env` or
 `profile <name>`, while the JSON `key_source` names the store — `env`,
 `keychain`, or `file`.
+
+`scopes` lists the key's scopes, or is `null` when camy can't tell. When
+the key lacks `workspace:exec` and the server registers it, the object also
+carries `"missing_scopes": ["workspace:exec"]`. `user` holds only `id`,
+`email`, `username`, `full_name`, and `role`, each when your account has
+one.
 
 Not signed in is reported as an auth error in both modes, but the shape
 differs: in human mode it's the two-line message below on stderr; under
@@ -467,9 +577,25 @@ camy auth logout
 
 Removes the key from this machine — the keychain entry or fallback file —
 and clears its cached scopes and expiry. This needs no confirmation and
-always succeeds locally, even if the key was already invalid. It doesn't
+succeeds even if the key was already invalid. It doesn't
 touch this Mac's link, its signing key, or its own credential; see
 [Take it back](device.md#take-it-back) for those.
+
+If the keychain refuses to delete the key, for example because it is
+locked, camy doesn't claim you're signed out. It exits 1 and says the key is
+still there:
+
+```text
+camy: couldn't remove the key from this machine — it is still stored: <reason>
+      unlock or allow access to the keychain and run camy auth logout again, or delete the "camy" item from it by hand
+```
+
+The fallback file, if any, and the cached scopes and expiry are removed
+either way. With `--json`, stdout carries an object with `"ok": false` and
+`"signed_out": false` before the error. Under `--revoke`, camy revokes the
+key on camy.ai before it tries to remove it here. If the keychain then
+refuses, the copy still stored here no longer works, and the `--json` object
+is still `{"ok": false, "signed_out": false}`, with no `revoked` field.
 
 ```bash
 camy auth logout --revoke
@@ -530,6 +656,9 @@ Setting `CAMY_API_KEY` overrides whatever key your active profile would
 otherwise use, for the lifetime of the process. It is never written to disk
 by camy. This is the supported way to authenticate non-interactively — in
 CI, cron, or any script — since `auth login` itself cannot run headless.
+A `CAMY_API_KEY` that holds only spaces, tabs, or a newline counts as
+unset, so camy uses the profile's stored key. A key from `CAMY_API_KEY`
+isn't tied to an address; see [The Camy a key belongs to](#the-camy-a-key-belongs-to).
 
 If you've also explicitly chosen a profile (with `--profile`, `CAMY_PROFILE`,
 or `default_profile`) while `CAMY_API_KEY` is set, camy prints a one-time
@@ -556,7 +685,11 @@ expired reads `expired` in the `expires` column. The key this terminal holds is 
 listing is made with, so when it has expired, `camy keys list` shows no list.
 It fails with `your key expired` or `your session expired <date>` (exit 3),
 and `camy auth login` fixes it.
-`camy keys` with no subcommand runs the same listing.
+`camy keys` with no subcommand runs the same listing. With `--json`, each
+row's field names are snake_case, such as `created_at` and `last_used_at`,
+except with `--raw`, which passes the server's own names through; earlier
+versions passed camelCase names such as `createdAt` through, so
+update any script that reads them.
 
 ```bash
 camy keys rotate <id>
@@ -602,20 +735,31 @@ and optionally its own `api_url`/`editor`/`pager` overrides in
 work — side by side, independent of each other.
 
 ```bash
-camy profile
+camy profile list
 camy profile use work
 ```
 
-Bare `camy profile` lists `default` plus every profile that has a
-`[profile.NAME]` table in `config.toml`, marking the persisted default.
+[`camy profile list`](reference/camy_profile_list.md), or bare
+`camy profile`, lists `default`, every profile that has a `[profile.NAME]`
+table in `config.toml`, and every profile you have signed in to with
+`camy auth login --profile NAME`, marking the persisted default. See
+[List profiles](configuration.md#list-profiles).
+
+A profile name is a plain name: letters, digits, `.`, `_`, or `-`, starting
+with a letter or digit, up to 64 characters. camy refuses any other name
+from `--profile`, `CAMY_PROFILE`, or `camy profile use`, and ignores one in
+`default_profile` with a warning, using `default` instead. If you use a
+profile whose name breaks the rule, switch to a plain name and sign in
+under it.
 
 [`camy profile use NAME`](reference/camy_profile_use.md) only persists the
 default choice — it writes `default_profile` and does not create a
-`[profile.NAME]` table, so the name still won't show up in `camy profile`'s
-list until you add such a table with
-[`camy config edit`](reference/camy_config_edit.md). It also doesn't check
-that `NAME` has a signed-in key; if it doesn't, commands run under it report
-"not signed in" until you run `camy auth login` there too.
+`[profile.NAME]` table, so the name shows up in `camy profile`'s list only
+once it has such a table, which you can add with
+[`camy config edit`](reference/camy_config_edit.md), or once you sign in to
+it. It also doesn't check that `NAME` has a signed-in key; if it doesn't,
+commands run under it report "not signed in" until you run
+`camy auth login` there too.
 
 Select a profile for a single command with `--profile` or `CAMY_PROFILE`:
 
@@ -639,6 +783,7 @@ ladder.
 | `--revoke` | [`camy auth logout`](reference/camy_auth_logout.md) | also revoke the key server-side |
 | `--confirm revoke` | [`camy auth logout`](reference/camy_auth_logout.md) | confirmation word for `--revoke` in scripts |
 | `--profile` | any command | run under a named profile instead of the persisted default (env `CAMY_PROFILE`) |
+| `--api-url` | any command | the API origin for this command (env `CAMY_API_URL`); with `camy auth login`, the Camy the new key is tied to |
 
 | Variable | Meaning |
 |---|---|

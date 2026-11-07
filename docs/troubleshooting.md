@@ -18,24 +18,31 @@ camy doctor
 ```text
 $ camy doctor
   ✓ binary     /usr/local/bin/camy
-  ! path       not on PATH — add /usr/local/bin to PATH
-  ✓ version    v1.0.0 (darwin/arm64)
-  ! keychain   exit status 154 — keys fall back to a 0600 file in the state dir
-  × auth       no key on profile default — camy auth login
-  ! terminal   hyperlinks no · graphics no — iTerm2/kitty unlock inline image previews
+  ! path       not on PATH
+               add /usr/local/bin to PATH
+  ✓ version    v1.0.6 (darwin/arm64)
+  ! keychain   exit status 154
+               keys fall back to a 0600 file in the state dir
+  ✗ auth       no key on profile default
+               camy auth login
+  · render     256 colours · dark ground (default) · 120 columns · hyperlinks no
+  ! terminal   no inline graphics — iTerm2 or kitty unlock camy computer peek
+
+  one thing is broken and everything below it is unknown, not fine
 camy: some checks failed
+      the ✗ row above names the fix
 ```
 
-`✓`, `!`, and `×` mark ok, warning, and failure — `OK`, `!`, and `x` in
-`--accessible` mode or a non-UTF-8 locale. Each row's fix, when it has one,
-follows the dash. The `terminal` row is the exception: it reports whether
-your terminal can draw hyperlinks and inline images, so its note isn't a
-command to run.
+`✓`, `!`, `✗` and `·` mark ok, warning, failure and a neutral note — `+`,
+`!`, `x` and `-` in a non-UTF-8 locale, and the words `OK`, `NEEDS`,
+`FAIL` and `NOTE` in `--accessible` mode. A row's fix, when it has one, is
+the line under it.
 
-[`camy doctor`](reference/camy_doctor.md) runs up to seven checks, in this
-order. `path` appears only when the binary's directory isn't on `$PATH` —
-or, for an npm install, when no `camy` on `$PATH` leads back to it — and
-`api` only when a key is stored:
+[`camy doctor`](reference/camy_doctor.md) runs its checks in this order.
+`path` appears only when the binary's directory isn't on `$PATH` — or, for
+an npm install, when no `camy` on `$PATH` leads back to it — `api` only
+when a key is stored, and `terminal` only when your terminal can't draw
+inline images:
 
 | Check | What it verifies | Can fail the command? |
 | --- | --- | --- |
@@ -44,22 +51,29 @@ or, for an npm install, when no `camy` on `$PATH` leads back to it — and
 | `version` | The installed version and platform. | No — always ok |
 | `keychain` | A round-trip write/delete against your OS keychain. | No — warning only |
 | `auth` | Whether a key is stored, and whether the server still accepts it. | **Yes** |
-| `api` | Reachability and latency to your `api_url`. Shown whenever a key is stored — including when that key is rejected, in which case both rows fail. | **Yes** |
-| `terminal` | Hyperlink and inline-image support in your current terminal. | No — warning only |
+| `api` | Reachability and latency to your `api_url`. Shown whenever a key is stored. | **Yes** |
+| `render` | How camy draws in this terminal: colours, light or dark ground, width, and hyperlinks. | No — a note |
+| `terminal` | Inline-image support in your current terminal. Only shown when it's missing. | No — warning only |
 
 Only `auth` and `api` can fail the command. Every other row is
 informational, so an otherwise-healthy machine with a flaky keychain, no
 `PATH` entry, or a plain terminal still exits 0.
 
+When your key works but can't run commands on your cloud computer, a
+second `auth` line says so:
+`this key can't run commands on your cloud computer; run camy auth login to add that`.
+[`camy auth status`](reference/camy_auth_status.md) prints the same line.
+
 Three things trip exit 1: not signed in, a stored key the server no longer
-accepts, or an API camy can't reach at all. A network failure fails the
-`auth` and `api` rows together, so check the `api` row's host before
-assuming the key is bad.
+accepts, or an API camy can't reach at all. When the API can't be reached,
+the `api` row fails with the host that didn't answer and `auth` reads
+`not checked — needs the api`, so nothing is claimed about the key.
 
 Add `--json` for a script-readable array of `{"name","ok","info"}` objects.
-Each carries `"warn": true` and a `"fix"` string only when it has one; both
-keys are omitted otherwise. Test truthiness (`select(.warn)`) rather than
-comparing against `false`, since the exit code alone reflects only `ok`:
+Each carries `"warn": true`, `"note": true` and a `"fix"` string only when
+it has one; those keys are omitted otherwise. Test truthiness
+(`select(.warn)`) rather than comparing against `false`, since the exit
+code alone reflects only `ok`:
 
 ```bash
 camy doctor --json | jq '.[] | select(.ok == false)'
@@ -82,16 +96,27 @@ camy: HTTP 400: That code is invalid or has expired. Request a new one.
 A validation refusal (HTTP 422) names the field it didn't accept, as in
 `camy: HTTP 422: email: Field required`. A few statuses read differently. A
 409 is the server's sentence alone, with no status. A 404 reads
-`not found: <sentence>`. A 403 that isn't a scope, key, plan or credit
-refusal reads `blocked at the edge or forbidden: <sentence>`, with the hint
+`not found: <sentence>`. A 403 that camy can't read as anything more
+specific reads `blocked at the edge or forbidden: <sentence>`, with the hint
 `if this persists it's us, not you`. If the sentence doesn't tell you
 what to change, include that request id in a bug report; see
 [Getting request IDs for support](#getting-request-ids-for-support).
 
+Many 403s do read as something more specific: a missing scope, a refused
+key, your plan or your credits, and the account and app-only refusals under
+[Not signed in](#not-signed-in-exit-3). Where Camy isn't offered in your
+country or region, a sign-in or any other command reads
+`Camy is not available in your country or region.`, and publishing a site
+from the canvas, or changing a published one, reads
+`Publishing is not available in your country or region.` Both exit 1 with
+no hint: trying again won't change the answer.
+
 A server fault (HTTP 5xx) is exit 1 as well, with the hint `try again`. It
 reads `camy.ai had a problem`, followed by `(request <id>)` when the server
 tagged the request. When a 502, 503 or 504 carries the app's own sentence,
-such as `Couldn't reach the app.`, that sentence replaces the generic one.
+such as `Couldn't reach the app.`, that sentence replaces the generic one,
+and when that sentence already says to try again there is no second
+`try again` hint under it.
 That copy applies unless a verb rewords it. On a custom app,
 [`camy connectors check`](reference/camy_connectors_check.md),
 [`resume`](reference/camy_connectors_resume.md) and the approval in
@@ -104,8 +129,10 @@ put the request id on its own line, and give the hint
 
 A write that fails with a server fault, or on a connection that broke after
 the request went out, may still have gone through. Check before you retry
-it. [`camy inbox send`](reference/camy_inbox_send.md) says so in place of
-the retry hint: `check your Sent folder before retrying — it may have gone out`,
+it. An answer that stops arriving partway counts as such a broken
+connection: it fails on the `can't reach <host>` card, exit 1, never as an
+empty success. [`camy inbox send`](reference/camy_inbox_send.md) says so
+in place of the retry hint: `check your Sent folder before retrying — it may have gone out`,
 or `check camy inbox outbox before retrying — it may already be queued` for
 a send scheduled with `--at`. When you gave no `--provider`, either one goes
 on with ` · if it didn't, retry with --provider gmail|outlook`. On the
@@ -157,6 +184,24 @@ camy: unknown command "nosuchcmd" for "camy"
       camy --help lists its commands
 ```
 
+So is a help topic camy doesn't have, as in `camy help nope`, which reads
+``Unknown help topic [`nope`]``, and an `--api-url` or `CAMY_API_URL` that
+isn't a valid address:
+
+```text
+$ camy --api-url not-a-url status
+camy: config: api_url "not-a-url" (from flag) must be an https:// URL (http://
+      is allowed only for localhost)
+```
+
+An account that still needs your month and year of birth stops every
+command and chat turn with exit 2 until you answer:
+
+```text
+! Camy needs your month and year of birth before it can continue.
+  Answer at https://camy.ai/p/account/age
+```
+
 ### Not signed in (exit 3)
 
 ```text
@@ -188,7 +233,10 @@ That table applies to ordinary commands. On the chat connection, as in
 `camy chat`, `camy chat attach` and `camy approvals approve --wait`, a
 refused key draws `not signed in` whatever the reason, or
 `your sign-in expired` with `your session expired <date>` when camy recorded
-an expiry that has passed. The fix is still `camy auth login`.
+an expiry that has passed. The fix is still `camy auth login`. Two
+refusals there say more: a key without the scope chat needs gets the
+missing-scope refusal below, and an account refused for age says so, as
+under [Account refusals](#account-refusals-exit-3).
 
 A 403 that refuses the key itself, rather than the request, is exit 3 too.
 It prints the server's own sentence, such as `Account is not active`, with a
@@ -200,6 +248,51 @@ When camy.ai couldn't look the key up at all, that isn't a verdict on the
 key, and camy never reads it as one. A command exits 1 with the server's
 sentence or `camy.ai couldn't check your key just now`; a chat connection
 exits 7. Nothing about your key changed, so try again.
+
+### Only in the Camy app or at camy.ai (exit 3)
+
+camy.ai lets no API key do some things, such as changing a setting that
+loosens a safeguard, exporting your data, billing, and setting up or
+resizing your cloud computer. The terminal always signs in with an API
+key, so these exit 3 with camy.ai's own sentence and a hint that says
+where to go:
+
+```text
+$ camy vm resize large
+camy: Your Desktop can only be set up or resized from your signed-in Camy app or
+      browser, not with an API key
+      do it in the Camy app or at camy.ai — the terminal always signs in with an
+      API key
+```
+
+Signing in again doesn't change this. Do it in the Camy app or at camy.ai.
+[`camy vm resize`](reference/camy_vm_resize.md) says so at once, before it
+reads anything or asks you to confirm.
+
+### Account refusals (exit 3)
+
+Signing in to an account that is scheduled for deletion says when it will
+be deleted, in this computer's local time, and how to cancel. There is no
+command for cancelling; it happens on the web:
+
+```text
+camy: Your account is scheduled for deletion on March 4, 2027 at 3:04 PM.
+      To cancel, sign in at camy.ai and choose Cancel deletion.
+```
+
+When camy.ai gives no date, the first line is
+`Your account is scheduled for deletion.`
+
+An account closed because Camy is only for adults stops every command and
+chat turn:
+
+```text
+✗ This account has been closed because Camy is available only to adults.
+  If this is incorrect, request age verification at https://camy.ai/p/account/age
+```
+
+If camy.ai can't read the account's age record just now, the command
+reads `camy.ai had a problem` with the hint `try again`, and exits 7.
 
 ### Missing scope (exit 3)
 
@@ -216,14 +309,27 @@ one. When the server says any one of several scopes will do, the hint says
 can read, the hint ends `mint a key that has it: camy auth login --scopes +<scope>`.
 `--scopes all` still grants every scope, if you want that instead.
 
+Chat needs `chat:read`. A key without it stops a chat turn at once, with
+this refusal and a hint ending `camy auth login --scopes +chat:read`,
+instead of reconnecting again and again. The REPL or the full-screen app,
+open with nothing running, says it once, followed by
+`— quit, then camy auth login`.
+
+A key that may not offer this computer's local tools to Camy isn't refused
+outright. The full-screen app says why once, in camy.ai's words or as
+`This API key can't register local tools. Run camy auth login to sign in with a key that can.`,
+and the chat goes on without local tools. A one-shot `camy chat` goes on
+without local tools too and doesn't print the line.
+
 `workspace:exec`, which [`camy vm exec`](reference/camy_vm_exec.md) and
 [`camy vm shell`](reference/camy_vm_shell.md) need, is in the default set,
 so a plain `camy auth login` key has it. A key minted before the scope
 existed, or one minted without it on purpose, gets the refusal. That hint
 ends
 `run camy auth login to sign in again; the new key can run commands in your workspace`.
-`camy vm exec` reports the refusal as its own failure, exit 255. See
-[Scopes](authentication.md#scopes).
+`camy vm exec` reports the refusal as its own failure, exit 255.
+`camy auth status` and `camy doctor` warn about such a key before you
+try. See [Scopes](authentication.md#scopes).
 
 ### Checkpoint pending, in a script (exit 4)
 
@@ -234,7 +340,18 @@ checkpoint <id> requires approval:
 
 A chat turn paused for a human decision and the process couldn't ask —
 `--no-input`, any machine output (`--json`/`--jq`/`--template`), or no
-`/dev/tty` to prompt on. Nothing failed.
+`/dev/tty` to prompt on. Nothing failed. When the card is a question, the
+handle names the verb that answers it:
+
+```text
+checkpoint <id> is a question — it's answered, never approved:
+  camy approvals answer <id> "…"
+```
+
+A command on your own machine that would run without asking at a terminal
+doesn't stop here under `--no-input` or with no `/dev/tty`: it runs
+headless too. Under `--json`/`--jq`/`--template` the local bridge is off
+for the run, so no command runs on your machine.
 
 Resolve it out of band with [`camy approvals`](reference/camy_approvals.md)
 `approve`, `deny`, or `answer`; the whole model is in
@@ -243,6 +360,13 @@ Resolve it out of band with [`camy approvals`](reference/camy_approvals.md)
 Add `--wait` to `approve`/`answer` to stream the resumed turn right there,
 re-join it later with [`camy chat attach`](reference/camy_chat_attach.md),
 or read the result with [`camy chats show`](reference/camy_chats_show.md).
+
+`camy approvals approve` and `deny` exit 4 too when the request was edited
+somewhere else after `camy approvals show` or a `camy approvals --json`
+listing showed it, on the same profile within a day. Nothing runs, the card
+still waits, and the hint is `camy approvals show <id>`: read what it asks
+now, then decide again. A row seen only in the `camy approvals` table is
+answered as it stands.
 
 ### Rate limited (exit 5)
 
@@ -261,6 +385,14 @@ own only while that wait is two minutes or less. A longer one ends the
 command at once instead of retrying into the same refusal, and the hint
 names the wait in minutes, hours or days, as in `retry in about an hour`.
 However large the value, camy gives up cleanly with exit 5.
+
+One limit isn't about time. When you already have as many active
+schedules as your account allows,
+[`camy schedule create`](reference/camy_schedule_create.md) and
+[`camy schedule resume`](reference/camy_schedule_resume.md) exit 5 with
+camy.ai's own reason instead of `rate limited`, and no retry hint. Waiting
+won't help: delete one with `camy schedule delete ID`, or pause one with
+`camy schedule pause ID`, first.
 
 The chat connection has rate limits of its own, and they exit 5 as well.
 Your account can hold only so many open connections at once:
@@ -281,20 +413,20 @@ busy, exit 5 too.
 
 ```text
 camy: your plan doesn't include this
-      Workspace size 'xl' requires pro plan or higher — camy.ai/pricing ↗
+      <camy.ai's sentence> — camy.ai/pricing ↗
 ```
 
 The API returned HTTP 402, or a 403 that means paid tier only, rather than
 an auth problem. The hint puts the server's own sentence, which usually
-names the size or tier you'd need, ahead of the pricing link. A 402 draws a
+names the tier you'd need, ahead of the pricing link. A 402 draws a
 card instead of two lines, with `camy.ai/p/plan` and `camy mode quick` as
 its fixes. There's nothing to fix client-side.
 
 Running out of credits is exit 6 too, and says so. Outside a chat turn the
 message is `you're out of credits`, never a plan or a missing-scope error.
 A 403 that carries only a sentence prints two lines, with the server's
-sentence as the hint. A 402, or the structured refusal a workspace
-provision, start or resize can send, draws a card whose fix is
+sentence as the hint. A 402, or the structured refusal starting a
+workspace can send, draws a card whose fix is
 `camy.ai/p/plan`, where you add credits; otherwise wait for the daily
 refresh. Under `--json` the error's `hint` carries the server's sentence.
 For the structured workspace refusal it reads
@@ -331,8 +463,11 @@ behalf. It counts that refusal as its own failure, so it exits 255, not 7:
 
 ```text
 camy: you don't have a workspace yet — exec won't create one
-      camy vm provision makes one (camy vm sizes lists what it costs)
+      set one up in the Camy app or at camy.ai (camy vm sizes lists what it costs)
 ```
+
+Setting one up happens in the Camy app or at camy.ai, never from the
+terminal; see [Only in the Camy app or at camy.ai](#only-in-the-camy-app-or-at-camyai-exit-3).
 
 ### Chat service unavailable (exit 7)
 
@@ -354,6 +489,18 @@ A chat connection that camy.ai can't serve right now exits 7, not 1:
 Retry in a moment. A chat that is already mid-turn is different: it exits
 1 with a hint to rejoin it with
 [`camy chat attach`](reference/camy_chat_attach.md).
+
+### Not on for your account yet (exit 7)
+
+A feature camy.ai hasn't turned on for your account says so and exits 7,
+as in `Searching your calls isn't on for your account yet.` or
+`Linking a computer isn't on for your account yet.` Nothing is wrong with
+your key or your install.
+
+A [`camy device`](reference/camy_device.md) command that needs this Mac to
+be linked exits 7 as well when it isn't, with
+`This Mac isn't linked to a Camy account.` and the hint
+`camy device enroll`.
 
 ### Denied (exit 8)
 
@@ -383,7 +530,8 @@ If `camy doctor`'s `keychain` row warns, your OS keychain refused the
 scratch write-then-delete `camy` tried:
 
 ```text
-! keychain   exit status 154 — keys fall back to a 0600 file in the state dir
+! keychain   exit status 154
+             keys fall back to a 0600 file in the state dir
 ```
 
 At sign-in, the same problem shows up as a note instead:
@@ -482,7 +630,8 @@ in and how you invoked `camy`.
 
 Every fix is one of three: run with `sudo` for a root-owned system install,
 remove a stray symlink that's shadowing your own install, or run the
-installer again.
+installer again. The installer needs `minisign`; see
+[The one-line installer](installation.md#the-one-line-installer).
 
 The installer lands in `~/.local/bin`, which you own, and adds that
 directory to the front of `PATH` in your rc file for new shells; the card
@@ -492,7 +641,10 @@ directory.
 A Homebrew-managed `camy` is refused before any of this: `camy update`
 detects it and points you at `brew upgrade camy` instead. An npm-managed
 one is refused the same way, pointing at `npm update -g @camy/cli`;
-`camy uninstall` behaves the same for both. See
+`camy uninstall` behaves the same for both. `camy update --check` still
+works on either, and names that command. Only a binary that lives in
+Homebrew's own `Cellar` counts as Homebrew-managed, so a `camy` you copied
+straight into a Homebrew `bin` folder updates in place. See
 [Updating](installation.md#updating) and [npm](installation.md#npm).
 
 ### When the new version doesn't start
@@ -525,7 +677,10 @@ camy update --json
 is back in place. `rolled_back: false` means camy couldn't
 keep or restore its copy, and the new binary is still in place: reinstall
 the version you had with the installer, pinned with `CAMY_VERSION` (see
-[Installation](installation.md#environment-variables)).
+[Installation](installation.md#environment-variables)). Under `sudo`, camy
+keeps its copy only in a folder that belongs to root, so when the update
+folder is yours, as it is when `sudo` keeps your `HOME`, `staged` is
+`false` and there is nothing to put back.
 
 ### Why `camy update` ignores `CAMY_DL_BASE`
 
@@ -571,10 +726,11 @@ covered in [Terminal output and accessibility](terminal.md#color). The short
 version:
 
 - `--color=never` always turns color off.
-- `NO_COLOR=1` (or `CLICOLOR=0`, or `TERM=dumb`) turns it off unless an
-  explicit `--color=always` overrides it.
+- `NO_COLOR=1` or `CLICOLOR=0` turns it off unless an explicit
+  `--color=always` overrides it. `TERM=dumb` turns it off even then.
 - `--color=always` turns it on wherever the terminal can carry it —
-  `TERM=dumb` or an unset `TERM` still yields no color.
+  `TERM=dumb` still yields no color, and an empty or unset `TERM` gets 16
+  colours. `FORCE_COLOR` and `CLICOLOR_FORCE` do the same.
 - Machine output (`--json`/`--jq`/`--template`) is never styled, regardless
   of any of this.
 
@@ -595,28 +751,59 @@ further: no spinners, no redrawn boxes, no cursor movement, and it forces
 the plain-line REPL over the full-screen app entirely. See
 [The full-screen app and `--inline`](terminal.md#the-full-screen-app-and---inline).
 
+## Local commands and the sandbox
+
+Commands Camy runs on your machine go through the local command sandbox,
+set with `--sandbox` or `CAMY_LOCAL_SANDBOX`. Left unset, it enforces only
+where this machine can fully contain a command, and otherwise observes.
+When you ask for `enforce` yourself on a machine that can't contain a
+command, camy refuses to run it, saying this machine cannot contain a
+command and why, instead of running it without the sandbox. Install what
+the reason names, or use `--sandbox observe`.
+
+On Linux the sandbox is bubblewrap (`bwrap`):
+
+- camy uses only a bubblewrap installed for the whole system, such as your
+  distribution's `bubblewrap` package. A copy in your home folder isn't
+  used, so if that was your only one, install the system package.
+- camy checks that bubblewrap can really start a sandbox. Where it can't,
+  as in some containers, the sandbox reads unavailable with bubblewrap's
+  own reason, and an unset mode observes.
+
+`local_sandbox` in `camy version --json` shows what this machine does:
+`enforcement` is `full` when it can contain a command and `unavailable`
+when it can't. See
+[The boundary, and the sandbox](local-bridge.md#the-boundary-and-the-sandbox).
+
 ## Getting request IDs for support
 
 ```bash
 camy --verbose --json status
 ```
 
-Request IDs do not come from `-v`. They arrive in the JSON error object with
-`--json`, at the end of a 5xx message as `camy.ai had a problem (request <id>)`
-or `<the app's own sentence> (request <id>)` unless a verb rewords it, and
-as a last `request <id>` line under any other exit-1 error from a request
-the server tagged.
+With `-v`/`--verbose`, most commands print one line on stderr for each
+request they make, with the method, the path (never its query), the
+status, the time it took, and the request id when the server sent one:
+
+```text
+GET <path> 200 · 182ms · req <id>
+```
+
+Request IDs also arrive in the JSON error object with `--json`, at the end
+of a 5xx message as `camy.ai had a problem (request <id>)` or
+`<the app's own sentence> (request <id>)` unless a verb rewords it, and as
+a last `request <id>` line under any other exit-1 error from a request the
+server tagged.
 
 That object carries `request_id` whenever the failing call was a REST
 request the server tagged with one. It is empty for errors that arrive over
 the chat WebSocket, which don't carry a request ID — see
 [the JSON error shape](exit-codes.md#the-json-error-shape).
 
-`-v`/`--verbose` adds something different: a one-line note on which
-credential source a command used (`auth: <prefix>… key from <source>`), the
-agent's per-step trace lines while a chat streams, and the underlying error
-when a chat connection can't be opened. Combine it with `--json` when
-something fails.
+`-v` adds three more things: a one-line note on which credential source a
+command used (`auth: <prefix>… key from <source>`), the agent's per-step
+trace lines while a chat streams, and the underlying error when a chat
+connection can't be opened. Combine it with `--json` when something fails.
 
 When filing a [bug report](../SUPPORT.md), include the output of
 [`camy version --json`](reference/camy_version.md) and `camy doctor` —
@@ -634,10 +821,23 @@ the update copy its own row. The exact paths, and how the
 does not write a separate log file; everything it prints goes to your
 terminal's own scrollback.
 
+camy needs `HOME` to be an absolute path, unless `XDG_CONFIG_HOME`,
+`XDG_STATE_HOME` and `XDG_CACHE_HOME` are all set to absolute paths. When
+it isn't, every command stops with exit 1:
+
+```text
+camy: config: HOME is not an absolute path, so camy cannot find its config,
+      state or cache directory — set HOME (or XDG_CONFIG_HOME, XDG_STATE_HOME
+      and XDG_CACHE_HOME) to an absolute path
+```
+
+A relative `XDG_*` value is ignored, and the default under `HOME` is used
+instead.
+
 | Directory | What it holds | Deleting it |
 | --- | --- | --- |
 | Cache — `~/.cache/camy` | Reserved. Nothing is written here today, so the directory usually doesn't exist. | Safe any time. [`camy uninstall`](reference/camy_uninstall.md) removes it if it's there. |
-| Per-profile state — `~/.local/state/camy/<profile>/` | The 0600 credential fallback file (only written when your keychain isn't reachable), your cached granted scopes and key expiry, the last chat id that [`camy chat`](reference/camy_chat.md) `-c`, `camy chat attach`, [`camy canvas`](reference/camy_canvas.md), and `camy approvals … --wait` fall back to, your chat input history, the chat mode you set with `camy mode`, any local-tool results still waiting to be replayed, and your local-bridge trust grants. | Revokes your trust grants, so every trusted command and path is prompted for again. Loses your history and last-chat pointer, resets your chat mode to `agent`, and clears the cached scopes and expiry. |
+| Per-profile state — `~/.local/state/camy/<profile>/` | The 0600 credential fallback file (only written when your keychain isn't reachable), your cached granted scopes and key expiry, the last chat id that [`camy chat`](reference/camy_chat.md) `-c`, `camy chat attach`, [`camy canvas`](reference/camy_canvas.md), and `camy approvals … --wait` fall back to, your chat input history, the chat mode you set with `camy mode`, any local-tool results still waiting to be replayed, your local-bridge trust grants, and, for a day, the ids and versions of the approvals camy last showed you. | Revokes your trust grants, so every trusted command and path is prompted for again. Loses your history and last-chat pointer, resets your chat mode to `agent`, and clears the cached scopes and expiry. A later `camy approvals approve` or `deny` then answers the request as it stands. |
 | Update copy — `~/.local/state/camy/update/` | The `camy` binary you were running before your last [`camy update`](reference/camy_update.md), readable only by you, kept so a new version that doesn't start can be put back. One copy, shared by every profile; the next update replaces it. | Safe any time. The next `camy update` keeps a fresh copy before it swaps. |
 | `config.toml` — `~/.config/camy/config.toml` | Your settings, profiles, and aliases. | Resets everything to defaults. Doesn't touch your stored credential. |
 

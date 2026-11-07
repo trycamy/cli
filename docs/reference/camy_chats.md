@@ -18,7 +18,9 @@ camy chats search "invoice"      every message that mentions it
 ### Options
 
 ```
-  -h, --help   help for chats
+      --all         show every session
+  -h, --help        help for chats
+  -L, --limit int   page size (default 25, newest first) (default 25)
 ```
 
 ### Options inherited from parent commands

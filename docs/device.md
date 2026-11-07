@@ -34,7 +34,9 @@ camy device enroll
 
 The command prints a short code and a link on camy.ai. Open the link, confirm
 the code, and approve the link in the browser; the command waits until you
-do. Under `--no-input` it refuses, because linking needs a browser approval:
+do. Ctrl-C while it waits stops it and removes the signing key it had
+started to make. Under `--no-input` it refuses, because linking needs a
+browser approval:
 
 ```text
 camy: linking a computer needs a browser approval
@@ -49,8 +51,10 @@ treats a link whose credential expired the same way, but only once the
 resident agent has run and recorded the expiry. `camy auth login` links this
 Mac again as soon as the expiry date it has on record has passed. When the
 old link is still listed at Camy, camy revokes it with your terminal's
-sign-in, or tells you to revoke it under Settings, then Your computers. If linking isn't available for your account, the command says
-`Linking a computer isn't on for your account yet.`
+sign-in, or tells you to revoke it under Settings, then Your computers. If
+linking isn't available for your account, the command says
+`Linking a computer isn't on for your account yet.` and exits 7; versions
+before 1.0.6 exited 1 here, so update any script that checks for that code.
 
 Linking leaves two things on this Mac. The first is a signing key, made on
 this Mac, that never leaves it. This release keeps that key in a file, and
@@ -169,6 +173,14 @@ the offline lease, and the agent row, with no last-contact time. If linking
 isn't on for your account, the sentence about the link is
 `Linking a computer isn't on for your account yet.` instead.
 
+On a Mac that isn't linked, `status`, `forget`, and `logs` stop with
+`This Mac isn't linked to a Camy account.` and point you at
+`camy device enroll`. The `scope` verbs give the same refusal once this
+terminal is signed in (and, for `scope add`, once its flags and PATH are
+valid), and `install` gives it once it runs from Camy.app. They exit 7;
+versions before 1.0.6 exited 2, so update any script that checks for that
+code.
+
 ## Run it in the background
 
 ```bash
@@ -179,9 +191,15 @@ camy device uninstall
 
 `install` registers the resident agent as a per-user LaunchAgent that runs
 `camy device run` at every login, and starts it now. It needs Camy.app and a
-linked Mac, and refuses without either. `uninstall` stops the agent and
-removes the LaunchAgent, and nothing else. The agent acts only while the link
-is active.
+linked Mac, and refuses without either. The LaunchAgent names the profile
+you ran `install` under, `default` included, so the agent runs that profile
+whatever `default_profile` says. An agent that an earlier version installed
+for `default` runs whichever profile `default_profile` names; run
+`camy device install` again to tie it to `default`. `uninstall` stops the
+agent and removes the LaunchAgent, and nothing else. This Mac has one
+LaunchAgent, so `camy device install` under another profile replaces the one
+installed before, and `uninstall` removes it whatever profile it runs. The
+agent acts only while the link is active.
 
 `logs` shows the last 200 lines of the agent's own log. The log lives in
 `~/Library/Logs/Camy/` and rotates at 5 MB, keeping three older files, so it
@@ -198,9 +216,14 @@ LaunchAgent doesn't restart it. It writes this line to the agent's log, where
   ⋮ MacBook Air is already being watched by another camy device run (pid 4812) — this one stops.
 ```
 
-The agent refuses to start, without touching the network, when this Mac was
-stopped with [`camy stop`](#stop-it-now), its link is already known to be
-revoked, or an earlier run already recorded that its credential expired. The
+The agent refuses to start, without touching the network, when this Mac
+isn't linked, its own credential is missing, it was stopped with
+[`camy stop`](#stop-it-now), its link is already known to be revoked, or an
+earlier run already recorded that its credential expired. Each of these
+refusals writes its reason to the agent's log and ends without an error, so
+the LaunchAgent doesn't start it again before your next login. When the Mac
+isn't linked, the reason is in `~/Library/Logs/Camy/agent.log`, and
+`camy device logs` won't show it until the Mac is linked again. The
 first start after an expiry no run has recorded reaches Camy once, learns of
 the expiry, records it, and stops without wiping anything. If Camy answers the agent's first
 connection by saying it could not confirm which Mac is connecting, the agent
@@ -227,6 +250,12 @@ fails, the agent keeps the rules it last read, and a start with no network
 uses them too. If Camy won't let this Mac's own credential read the rules,
 the agent says so once in its log and refuses only the Off rules it last
 read.
+
+Whatever this Mac's grants cover, the agent's file tools never read, list,
+search, or write camy's own settings, or the secret files and credential
+stores that [the secret-path denylist](local-bridge.md#the-secret-path-denylist)
+names, and a read-only command that runs without asking you is kept away
+from secret files and credential stores too.
 
 A rule set to Allow never adds a grant. A Mac whose signing key is kept in a
 file, which is every Mac this release links, skips every `files.write` and
@@ -261,7 +290,9 @@ only `camy device install` does. `camy device status` doesn't mention the
 stop either: it shows the link's status from Camy, such as active, with the
 agent `not running`. If camy can't record the stop, it still stops the agent
 first and then says what it couldn't record. When no agent is running, it
-says `the agent on this Mac isn't running.`
+says `the agent on this Mac isn't running.` That includes an agent that
+crashed and left its process id behind: camy never signals whatever process
+has that id now, and `camy device status` shows the agent `not running`.
 
 ## The ledger
 
@@ -272,7 +303,15 @@ camy ledger
 This Mac's own record: every call the agent accepted or refused, kept
 locally as a chain the command verifies before it shows anything. A chain
 that does not verify is shown with a warning and should be treated as
-untrusted until the cause is found.
+untrusted until the cause is found. `camy ledger` shows control, escape, and
+text-direction characters in a recorded row as visible text instead of
+letting them act on your terminal.
+
+The resident agent also sends each row to Camy, so Camy keeps a copy of the
+record. Before a row leaves this Mac, the agent masks the passwords, tokens,
+and keys it finds in what the row records; the ledger on this Mac keeps the
+row as it was written. If the ledger on this Mac starts over, the agent sends
+the new one from its first row, so Camy's copy has no gap.
 
 ## Take it back
 
@@ -287,10 +326,19 @@ Three actions, deliberately separate:
   again. `camy auth login` or `camy device enroll` then links the Mac again,
   with no `camy device forget` first.
 - **`camy device forget`** erases this Mac's half of the link: the key, the
-  stored credential, the record, and the ledger. When this terminal is
-  signed in to your account, it also revokes the link on the server
-  (`✓ this Mac forgot its link to Camy, and <name> is revoked.`); otherwise
-  it says to revoke it there too.
+  stored credential, the record, the ledger, and the link's cached files, so
+  nothing of it carries over to a link you make later. The agent's log in
+  `~/Library/Logs/Camy/` stays; nothing in it affects a new link.
+  First it stops this profile's resident agent, if it is running, so the
+  agent can't keep working on the old link or bring it back, and it removes
+  the agent's LaunchAgent, so macOS doesn't start the agent again at your
+  next login. A LaunchAgent that runs another profile is left alone. When
+  this terminal is signed in to your account, it also revokes the link on
+  the server (`✓ this Mac forgot its link to Camy, and <name> is revoked.`);
+  otherwise it says to revoke it there too. With `--json`, the object
+  carries `launch_agent_removed`, `true` when it removed the LaunchAgent.
+  A Mac you forgot with an earlier version keeps its LaunchAgent, which now
+  starts once at each login and stops; `camy device uninstall` removes it.
 - **`camy device uninstall`** stops the background agent. The link stays.
 
 A revoke is the only answer from Camy that clears this Mac's grants. An

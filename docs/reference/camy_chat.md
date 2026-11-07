@@ -22,7 +22,7 @@ camy chat [MESSAGE] [flags]
       --chat string          target a specific chat id
   -c, --continue             continue your last chat on this profile
   -h, --help                 help for chat
-      --temp                 temporary chat: nothing persisted server-side, no resume
+      --temp                 temporary chat: not saved to your history or memory; no resume
       --tier string          request a tier (the server may override; the real tier is reported)
 ```
 

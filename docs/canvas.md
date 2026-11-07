@@ -39,12 +39,13 @@ anchor [`camy chat -c`](reference/camy_chat.md) continues. With no chat to
 fall back to either, it exits 2 asking which chat's canvas you meant and
 points you at [`camy chats`](reference/camy_chats.md).
 
-A short id that matches nothing is passed straight through, and left to the
-server to reject. The exception is `camy canvas open`, which only builds a
-link: it refuses a short id that matches none of your chats (exit 2) instead
-of opening an empty canvas. One that matches more than one chat is refused
-client-side (exit 2) rather than guessed at. A ref under four characters is
-refused outright as too short to identify a chat.
+A short id that matches none of your chats fails at once with
+`no chat matches <id>` and a hint pointing at `camy chats` (exit 2). One
+that matches more than one chat is refused client-side (exit 2) rather than
+guessed at. A ref under four characters is refused outright as too short to
+identify a chat. If camy can't read your chat list, a short id is passed
+through as typed, except to `camy canvas open`, which refuses it rather than
+open an empty canvas.
 
 `--chat` only matters for the commands that read a canvas's files or work
 with checkpoints: `files`, `cat`, `pull`, `open`, `publish`, `snapshot`,
@@ -63,8 +64,8 @@ camy canvas files
 ```
 
 Lists the files currently in the canvas: a mark, the filename, its
-language, and a human-readable size. An empty canvas says so rather than
-printing nothing.
+language, and a human-readable size. An empty canvas says so and points you
+at `camy chats`, rather than printing nothing.
 
 `--json` gives one object per file. This is a shape the CLI builds, not a
 passthrough of the server's file list, and it does not carry file contents:
@@ -116,15 +117,20 @@ whole file set, so a conflict found late in the list can't leave earlier
 files already written. Two safety rules apply per file:
 
 - A filename that is empty, starts with `/`, or has a `..` path component
-  (`../x`, `a/../../b`) is never trusted as a local path. `pull` skips it
-  and names every skipped file on stderr (under `--json`, in `skipped`
-  instead), for example
-  `skipped 1 file — a path that is empty, absolute or climbs out of ./site is never written: "../x"`.
+  (`../x`, `a/../../b`) is never trusted as a local path, and neither is one
+  that holds a backslash or a control character, or names a dotfile that
+  other tools act on. Ordinary dotfiles such as `.gitignore` are still
+  written. `pull` skips the rest and names every skipped file on stderr
+  (under `--json`, in `skipped` instead), for example
+  `skipped 1 file — a path that is empty, absolute, climbs out of ./site, holds a backslash or control character, or names a dotfile other tools act on is never written: "../x"`.
   A name that only contains two dots, such as `jquery..min.js`, is an
   ordinary file and is written.
-- A destination that already exists as a **symlink**, live or dangling, is
-  refused unconditionally, even with `--force`. Remove it first, or pull
-  into a fresh directory.
+- `pull` never writes through a **symlink**. A destination that already
+  exists as one, live or dangling, is refused unconditionally, even with
+  `--force`, and so is a symlinked folder already inside `DIR` that a file
+  would be written into. Either one stops the pull before any file is
+  written, with exit 2 and `<path> is a symlink — refusing to pull through it`.
+  Remove the link first, or pull into a fresh directory.
 
 If any destination already exists as an ordinary file, `pull` refuses the
 whole operation with exit 2 and writes no files; `-f`/`--force` overwrites
@@ -215,7 +221,7 @@ camy canvas restore SNAPSHOT
 ```
 
 Rolls the canvas back to a snapshot. `SNAPSHOT` is a short id or a full id,
-resolved the same way `--chat` is; an ambiguous or too-short prefix is
+resolved against the canvas's snapshots; an ambiguous or too-short prefix is
 refused client-side. It asks for confirmation first — see
 [Confirmation and `--force`](#confirmation-and---force).
 
@@ -271,6 +277,10 @@ fails with the server's reason and never reaches the confirmation prompt.
 If camy.ai then refuses the publish itself (an invalid or reserved site
 name, or a file a site can't serve, for example), `publish` fails with
 camy.ai's own sentence and exit 1.
+
+Where publishing isn't offered, `publish`, `domain set` with a domain, and
+`domain verify` say `Publishing is not available in your country or region.`
+and exit 1.
 
 Human output links the new site's URL and reports how many files were
 published. See [`camy canvas publish`](reference/camy_canvas_publish.md).
@@ -484,6 +494,11 @@ override that; an ordinary existing file is refused unless you pass
 refused destination costs no export; a name the server suggests can only be
 checked once the download is in.
 
+The export downloads to a temporary copy first and is moved into place only
+once it is complete. If that copy is replaced by something else before then,
+`export` refuses to save it and exits 1 with
+`the export's staging file was replaced while it downloaded — not saving it`.
+
 `--json`:
 
 ```json
@@ -588,13 +603,15 @@ itself, and `preview` is an interactive action, not a data command.
 | No `--chat`, and no last chat to fall back to | 2 |
 | A `--chat` or snapshot ref under four characters | 2 |
 | An ambiguous chat or snapshot prefix | 2 |
-| `open` given a short chat id that matches none of your chats | 2 |
+| A short chat id that matches none of your chats | 2 |
 | A bad `MODE` or `FORMAT` | 2 |
 | A missing passcode, or one under six characters | 2 |
 | `domain set` given both `--clear` and a `DOMAIN`, or neither | 2 |
-| A symlink destination refused by `pull` or `export` | 2 |
+| A symlink destination refused by `pull` or `export`, or a symlinked folder `pull` would write into | 2 |
 | A filename `cat` can't find | 1 |
-| An empty canvas | 1 |
+| `publish`, setting a custom domain, or `domain verify` where publishing isn't offered | 1 |
+| An export whose temporary copy was replaced before it was saved | 1 |
+| `pull` or `preview` on an empty canvas (`files` prints the empty note and exits 0) | 1 |
 | No HTML entry point for `preview` | 1 |
 | `sites` or `versions` on a stopped or stopping workspace (when listing would start it) | 7 |
 | `rollback` with no workspace | 7 |

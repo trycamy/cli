@@ -16,6 +16,13 @@ Bare `camy vm` is the same as [`camy vm status`](#camy-vm-status). Every
 `camy vm` command uses the CLI's normal [exit codes](exit-codes.md), with one
 exception: `camy vm exec` mirrors your remote command's own code instead.
 
+camy.ai refuses [`camy vm provision`](#camy-vm-provision) and
+[`camy vm resize`](#camy-vm-resize) to an API key (exit 3), and the terminal
+always signs in with one, so you set a workspace up or resize it in the Camy
+app or at camy.ai. [`camy canvas publish`](canvas.md#camy-canvas-publish) is
+the exception: it still creates a workspace if you have none, and warns
+before its confirmation prompt.
+
 ## `camy vm exec`
 
 ```bash
@@ -36,6 +43,16 @@ Several arguments are quoted one by one, so the workspace sees exactly the
 argv you typed: the third example runs `sh` with two arguments, `-c` and
 `make build && make test`. Leading `NAME=value` words stay variable
 assignments, so `camy vm exec -- FOO=1 make` runs `make` with `FOO` set.
+
+The command can be up to 4,096 characters, counted as camy sends it,
+including the quotes it adds when you pass several arguments. A longer one
+is refused with exit 2 before anything is sent, so a stopped workspace is
+not woken for it:
+
+```text
+camy: that command is 5,005 characters — vm exec takes up to 4,096
+      put it in a script on the workspace and run that
+```
 
 stdin is not forwarded, and the command runs with no input. If data is
 already waiting on stdin (a redirected file, or a pipe that has already
@@ -80,6 +97,11 @@ doesn't, and is refused with `this key lacks a required scope` and a hint to
 run `camy auth login` again: `vm exec` exits 255, as it does for all of
 camy's own failures, and `vm shell` exits 3.
 
+You can check before you run anything. When camy can tell that your key
+lacks the scope, [`camy auth status`](reference/camy_auth_status.md) and
+[`camy doctor`](reference/camy_doctor.md) say
+`this key can't run commands on your cloud computer; run camy auth login to add that`.
+
 ### Waking a stopped workspace
 
 Before running the command, `camy vm exec` checks whether the workspace is
@@ -102,12 +124,14 @@ workspace is woken, and then the command is refused.
 
 `camy vm exec` never creates a workspace. If you don't have one at all, it
 exits 255 with `you don't have a workspace yet — exec won't create one` and
-points you at [`camy vm provision`](#camy-vm-provision). A workspace whose
-instance was terminated gets the same answer, starting
-`your workspace is gone`. A new workspace costs credits, so it is only made
-when you ask for it by name; [`camy vm sizes`](#camy-vm-sizes) lists what
-each size costs. A workspace in the middle of a resize isn't woken either:
-exec exits 255 and says it can run once the workspace is back.
+the hint `set one up in the Camy app or at camy.ai (camy vm sizes lists what it costs)`.
+A workspace whose instance was terminated gets the same hint, after a
+message starting `your workspace is gone`. A workspace is made when you set
+it up in the Camy app or at camy.ai, or when `camy canvas publish` needs
+one, and publish says so before you confirm;
+[`camy vm sizes`](#camy-vm-sizes) lists what each size costs. A workspace in
+the middle of a resize isn't woken either: exec exits 255 and says it can
+run once the workspace is back.
 
 ### Exit codes
 
@@ -116,7 +140,7 @@ exec exits 255 and says it can run once the workspace is back.
 | Exit code | Meaning |
 |---|---|
 | 0-254 | the remote command's own exit code, mirrored exactly |
-| 2 | usage error caught before any network call: `--vm` given, or a non-zero `--timeout` outside 1-3600 (`--timeout 0` means the same as omitting the flag); or a `--jq` / `--template` that doesn't parse, caught only after the command has run |
+| 2 | usage error caught before any network call: `--vm` given, a non-zero `--timeout` outside 1-3600 (`--timeout 0` means the same as omitting the flag), or a command over 4,096 characters; or a `--jq` / `--template` that doesn't parse, caught only after the command has run |
 | 7 | `--no-wake` was set and the workspace is stopped, stopping, starting or being provisioned |
 | 255 | camy's own failure — not a remote exit code: not signed in, the workspace was unreachable, you have no workspace or it is mid-resize, it couldn't be woken, the key lacks `workspace:exec`, the service turned the command down, the command outlived `--timeout`, no exit code came back, or the workspace agent itself failed |
 
@@ -225,7 +249,9 @@ When the shell exits, camy prints `the workspace closed the shell` (unless
 `--quiet`) and exits 0. A workspace that stops under you may end the session
 the same way. If the workspace ends the session with a reason of its own,
 camy exits 7 with `shell disconnected: <reason>` and suggests
-`camy vm status`. It doesn't reconnect.
+`camy vm status`. When the workspace ended the shell because it reached its
+time limit, camy suggests `camy vm shell` instead, since a new shell is the
+way to keep working. Either way, it doesn't reconnect.
 
 A signal sent to the camy process from outside (SIGINT, SIGTERM) or a terminal
 hangup unwinds the session cleanly, restoring your local terminal to normal
@@ -246,9 +272,9 @@ refusal's own message: exit 5 for a rate limit, 7 otherwise.
 
 A refusal no reconnect can change ends the command at once, on connect or
 when a reconnect meets it: a stopped workspace exits 7 and points at
-`camy vm start`, no workspace exits 7 and points at `camy vm provision`,
-running out of credits or a plan without the terminal exits 6, and a key the
-terminal refuses exits 3.
+`camy vm start`, no workspace exits 7 and suggests setting one up in the
+Camy app or at camy.ai, running out of credits or a plan without the
+terminal exits 6, and a key the terminal refuses exits 3.
 
 Too many connection attempts in a short time are turned away before the
 connection opens: camy exits 5 (naming the wait when the service gives
@@ -283,8 +309,8 @@ See [`camy vm shell`](reference/camy_vm_shell.md).
 When the service turns `start`, `stop`, `exec` or `apps` down with a sentence
 of its own (for `start`, a resize still in progress), camy prints that
 sentence as the error: exit 255 for `exec`, exit 1 for the others. When the
-sentence says no workspace was found, the error also points you at
-[`camy vm provision`](#camy-vm-provision). One exception: `camy vm start`
+sentence says no workspace was found, the error also suggests setting one up
+in the Camy app or at camy.ai. One exception: `camy vm start`
 refused for lack of credits prints `you're out of credits` and exits 6 (see
 [exit codes](exit-codes.md)); `camy vm exec` prints the same and keeps its
 255.
@@ -299,14 +325,17 @@ Reports whether the workspace is running. Human output opens with one line:
 a status dot, the workspace's state, and its instance id. Under it come a
 `size` row and an `address` row when the service reports them, then the
 commands that apply next: `camy vm exec`, `shell`, `apps` and `stop` while it
-runs; `camy vm provision` and `camy vm sizes` when you have no workspace or
-its instance was terminated; `camy vm status` again while a resize is in
-progress, since the workspace restarts on its own; and `camy vm start` and
-`camy vm sizes` otherwise. The size is the machine's instance type (a tier
-key such as `plus` only while a resize is in progress), and the address is
-the workspace's public IP. `camy vm ls` and
-`camy vm sizes` show which size tier you are on. `--json` returns the
-server's status object as-is. See
+runs; a pointer to set one up in the Camy app or at camy.ai, and
+`camy vm sizes`, when you have no workspace or its instance was terminated;
+`camy vm status` again while a resize is in progress, since the workspace
+restarts on its own; and `camy vm start` and `camy vm sizes` otherwise.
+
+The `size` row names the workspace's size tier, the same name `camy vm ls`
+and `camy vm sizes` use, and, when camy can read it, what it costs per hour,
+for example `plus · 15 credits/h`. camy reads the tier while the workspace
+is running or being resized; otherwise, or when it can't read it, the row
+shows the machine's instance type instead. The address is the workspace's public IP.
+`--json` returns the server's status object as-is. See
 [`camy vm status`](reference/camy_vm_status.md).
 
 ### `camy vm start`
@@ -320,8 +349,8 @@ take a few minutes, so this can run for a while before it returns.
 
 It waits up to 30 minutes; past that the call gives up with a runtime error
 (exit 1) even though the workspace may still be coming up — `camy vm status`
-tells you where it got to. The same ceiling applies to `stop`, `provision`,
-and `resize`. See [`camy vm start`](reference/camy_vm_start.md).
+tells you where it got to. The same ceiling applies to `stop`. See
+[`camy vm start`](reference/camy_vm_start.md).
 
 ### `camy vm stop`
 
@@ -341,12 +370,18 @@ camy vm provision
 camy vm provision --size SIZE
 ```
 
-Provisions the workspace if it doesn't exist yet, or reconciles it if it does.
-`--size` takes one of the tier keys [`camy vm sizes`](#camy-vm-sizes) prints;
-leave it out to use the default.
+Asks camy.ai to set the workspace up, or reconcile it if it exists.
+camy.ai sets a workspace up only from your signed-in Camy app or browser,
+never with an API key, and the terminal always signs in with one. So the
+request is refused, and `provision` exits 3 with camy.ai's answer:
 
-This runs in the background — poll `camy vm status` to watch it come up.
-Unlike `stop` and `resize`, `provision` does not ask for confirmation. See
+```text
+camy: Your Desktop can only be set up or resized from your signed-in Camy app or browser, not with an API key
+      do it in the Camy app or at camy.ai — the terminal always signs in with an API key
+```
+
+Set your workspace up in the Camy app or at camy.ai instead. If a script
+of yours runs `camy vm provision`, move that step there. See
 [`camy vm provision`](reference/camy_vm_provision.md).
 
 ### `camy vm ls`
@@ -356,8 +391,9 @@ camy vm ls
 ```
 
 Lists every VM you own, across roles — not just your primary workspace. Each
-row shows a status dot, id, role, state, and size tier. With none, it says so
-and points you at `camy vm provision`. See
+row shows a status dot, id, role, state, and size tier. With none, it says
+`a workspace is your cloud computer — set one up in the Camy app or at camy.ai.`
+and points you at `camy.ai/p/settings/desktop`. See
 [`camy vm ls`](reference/camy_vm_ls.md).
 
 ### `camy vm apps`
@@ -369,11 +405,16 @@ camy vm apps
 Shows what's running inside the workspace. It checks the workspace's state
 first and never starts it: a workspace that isn't running exits 7 with, for
 example, `workspace stopped — nothing is running in it` and `camy vm start`
-as the next step, and with no workspace it exits 7 and points you at
-`camy vm provision`. When camy.ai can answer for a workspace that isn't
-running itself, `apps` shows that answer and the next step instead, and
-exits 0. If a running workspace reports nothing, it says so instead of
-printing nothing. See
+as the next step, and with no workspace it exits 7 and suggests setting one
+up in the Camy app or at camy.ai. When camy.ai can answer for a workspace
+that isn't running itself, `apps` shows that answer and the next step
+instead, and exits 0.
+
+Human output lists only what runs for you: the workspace's own machinery
+(its system services, its display, the terminal it runs commands in, and
+the listing's own `ps`) is left out. When none of your own processes are
+running, `apps` prints nothing and exits 0. If a running workspace reports
+nothing at all, it says so instead. `--json` keeps the full listing. See
 [`camy vm apps`](reference/camy_vm_apps.md).
 
 ### `camy vm url`
@@ -404,54 +445,48 @@ those marks applies. When no workspace is running, nothing is marked
 
 When the service reports it, a closing `gpu` line names the GPU add-on, says
 whether you can add it, and gives what it adds per hour:
-`gpu <label> · available on <sizes> (camy vm resize SIZE --gpu) · +N credits/h`.
+`gpu <label> · available on <sizes> · +N credits/h`.
 When you can't add it, the middle part says `not on your plan` instead, or
 `not available yet` when the add-on isn't offered at all. The line is about
-what you can turn on, not whether your own workspace has a GPU. See
-[`camy vm sizes`](reference/camy_vm_sizes.md).
+what you can turn on, not whether your own workspace has a GPU.
+
+The list ends by pointing you at the Camy app or camy.ai, where you resize
+the workspace. See [`camy vm sizes`](reference/camy_vm_sizes.md).
 
 ### `camy vm resize`
 
 ```bash
 camy vm resize SIZE
-camy vm resize SIZE --gpu
-camy vm resize SIZE --no-gpu
 ```
 
-Resizes the workspace in place: stop, resize, start again, with your disk
-preserved throughout. SIZE is one of the tier keys
-[`camy vm sizes`](#camy-vm-sizes) prints — the CLI does not carry its own
-list.
+camy.ai resizes a workspace only from your signed-in Camy app or browser,
+never with an API key, and the terminal always signs in with one. So
+`camy vm resize` stops at once, before it checks the GPU add-on, asks you to
+confirm or sends anything, and exits 3. That holds with `--force`, `--gpu`
+or `--no-gpu` too:
 
-`--gpu` turns the GPU add-on on as part of the same resize, and `--no-gpu`
-turns it off. With neither, the add-on stays as it is: camy reads whether it
-is on now and keeps it that way. If it can't read that, the resize stops
-before anything changes and asks you to say which with `--gpu` or
-`--no-gpu`. Passing both is a usage error (exit 2).
-
-This takes a confirmation (or `--force`) because it means a few minutes of
-downtime. Downgrades are refused by the server, not the CLI.
-
-Check available sizes before resizing, then resize non-interactively:
-
-```bash
-camy vm sizes
-camy vm resize SIZE --force
+```text
+camy: Your Desktop can only be set up or resized from your signed-in Camy app or browser, not with an API key
+      do it in the Camy app or at camy.ai — the terminal always signs in with an API key
 ```
 
-See [`camy vm resize`](reference/camy_vm_resize.md).
+Resize the workspace in the Camy app or at camy.ai instead;
+[`camy vm sizes`](#camy-vm-sizes) still lists what each size costs. If a
+script of yours runs `camy vm resize SIZE --force`, that step now exits 3,
+so move it there. See [`camy vm resize`](reference/camy_vm_resize.md).
 
 ### `--json` output
 
-Every lifecycle command above returns the server's object as-is under
-`--json`, with one shape change: `vm ls` unwraps the server's envelope and
-prints a plain JSON array of VM rows. The CLI does not otherwise reshape the
-payload, so the exact fields you get can vary by command and over time.
+`status`, `start`, `stop`, `ls`, `apps`, `url` and `sizes` return the
+server's object as-is under `--json`, with one shape change: `vm ls` unwraps
+the server's envelope and prints a plain JSON array of VM rows. `provision`
+and `resize` are refused with exit 3 and return no object. The CLI does not
+otherwise reshape the payload, so the exact fields you get can vary by
+command and over time.
 
-`vm status`, `vm start`, `vm provision`, and `vm resize` build their human
-line from a `status` or `state` field in the response; `vm stop` prints a
-fixed acknowledgement instead, which is why it tells you to poll
-`camy vm status`.
+`vm status` and `vm start` build their human line from a `status` or
+`state` field in the response; `vm stop` prints a fixed acknowledgement
+instead, which is why it tells you to poll `camy vm status`.
 
 `vm sizes` normally renders a table; if the server's response ever doesn't
 have the shape the CLI expects, it falls back to printing the raw JSON object

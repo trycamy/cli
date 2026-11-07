@@ -1,10 +1,10 @@
 # Verifying releases
 
 The [installer](installation.md) and [`camy update`](reference/camy_update.md)
-already verify every download over TLS against a SHA-256 checksum before
-anything is installed. This page is for going further: checking a release's
-signed manifest, reading its SBOM, and knowing exactly what is inside a
-release tarball.
+already verify every download over TLS against a SHA-256 checksum from the
+release's signed manifest before anything is installed. This page is for
+going further: checking a release's signed manifest yourself, reading its
+SBOM, and knowing exactly what is inside a release tarball.
 
 ## What a release publishes
 
@@ -192,17 +192,18 @@ commit of that repository; the same binding every later release carries.
 
 ## What the installer and `camy update` check
 
-The installer fetches the release's own `SHA256SUMS-<version>` over TLS.
-If `minisign` is installed, it verifies that manifest's signature with the
-public key above before trusting it, and the summary line says
-"signature and checksum verified"; set `CAMY_REQUIRE_SIGNATURE=1` to refuse
-an install where that check cannot run. Without minisign the install rests
-on TLS plus the checksum, the same assurance package managers typically
-provide, and the summary says so. The installer also refuses a channel that
-names a release older than the one before it shipped: every installer's
-floor is the previous release.
+The installer fetches the release's own `SHA256SUMS-<version>` over TLS
+and verifies that manifest's signature with the public key above before
+trusting it; the summary line says "signature and checksum verified". From
+1.0.6 the signature check is required: without `minisign` installed, the
+installer stops before downloading anything. Setting
+`CAMY_REQUIRE_SIGNATURE=0` skips the check, and the install then rests on
+TLS plus the checksum alone, which the summary line says. The installer
+also refuses a channel that names a release older than the one before it
+shipped: every installer's floor is the previous release.
 
-`camy update`, from 1.0.1, goes further. Before it downloads anything it
+`camy update`, from 1.0.1, makes the same check with no way to turn it
+off, and makes it first. Before it downloads anything it
 fetches the release's `SHA256SUMS-<version>` and its `.minisig`, verifies
 that signature with the minisign public key above, which is built into the
 binary, and only then downloads the tarball and checks its hash against the
@@ -215,10 +216,13 @@ host it downloads from, on any released binary. Only an unstamped development
 build reads that variable, and only when it is a well-formed `https://` URL.
 A poisoned shell profile cannot redirect `camy update` at another host.
 
-The installer script is different. It honors `CAMY_DL_BASE` unconditionally,
-because pointing it at a mirror is how the script itself is retargeted, and an
-`http://` override also turns off its HTTPS pin, leaving only the checksum.
-Check the environment before piping the installer to a shell.
+The installer script is different. It honors `CAMY_DL_BASE`, because
+pointing it at a mirror is how the script itself is retargeted, but only as
+an `https://` address, and it refuses a redirect off https. Plain `http://`
+is accepted only for a mirror on this machine (`127.0.0.1`, `localhost` or
+`[::1]`). The release signature is checked whichever base you name, unless
+`CAMY_REQUIRE_SIGNATURE=0` is set. Check the environment before piping the
+installer to a shell.
 
 ## Reading the SBOM
 

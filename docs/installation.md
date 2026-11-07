@@ -18,26 +18,43 @@ would on a native Linux machine.
 curl -fsSL https://camy.ai/cli/install.sh | sh
 ```
 
-No `sudo` is used at any step. The script, in order:
+The installer needs [minisign](https://jedisct1.github.io/minisign/) to
+check the release signature, and since 1.0.6 it won't install without it.
+Install it first, including on CI machines that run the script:
+
+```bash
+brew install minisign       # macOS
+sudo apt install minisign   # Debian and Ubuntu
+```
+
+Without it the script stops before downloading anything and says how to
+get it. To install anyway, protected by TLS and a checksum only, set
+`CAMY_REQUIRE_SIGNATURE=0`; that is discouraged.
+
+The script itself never uses `sudo`. In order, it:
 
 1. **Resolves what to install.** It picks a download base (default
-   `https://dl.camy.sh/stable`) and an install directory (default
-   `~/.local/bin`), then the version to fetch: either the value you passed
-   in `CAMY_VERSION`, or the current version from that base's `VERSION`
-   file. A `VERSION` older than the previous release is refused, so a
-   rolled-back mirror can't steer a fresh install onto an old build: the
-   installer published with 1.0.5 refuses anything older than 1.0.4. A
-   `CAMY_VERSION` pin is your own choice and skips that check.
+   `https://dl.camy.sh/stable`), which must be an `https://` address, and
+   an install directory (default `~/.local/bin`), which must be an
+   absolute path. It checks that `minisign` is there. Then it picks the
+   version to fetch: either the value you passed in `CAMY_VERSION`, or the
+   current version from that base's `VERSION` file. A `VERSION` older than
+   the previous release is refused, so a rolled-back mirror can't steer a
+   fresh install onto an old build: the installer published with 1.0.6
+   refuses anything older than 1.0.5. A `CAMY_VERSION` pin is your own
+   choice and skips that check.
 2. **Detects your platform.** OS (`darwin` or `linux`) and architecture
    (`arm64` or `amd64`, with `aarch64` and `x86_64` accepted as aliases).
 3. **Downloads and verifies.** It fetches your platform's release tarball
-   and that release's own checksum manifest, `SHA256SUMS-<version>`. If
-   `minisign` is installed, it verifies the manifest's signature with the
-   camy release key built into the script, and a missing signature or one
-   by any other key stops the install. Without `minisign` the check is
-   checksum only, and the summary line says so. It then checks the
-   tarball's SHA-256 against the manifest. Any mismatch, or no match, stops
-   the install, and the temp download directory is removed on the way out.
+   and that release's own checksum manifest, `SHA256SUMS-<version>`. It
+   verifies the manifest's signature with the camy release key built into
+   the script, and a missing signature or one by any other key stops the
+   install. It then checks the tarball's SHA-256 against the manifest. Any
+   mismatch, or no match, stops the install, and the temp download
+   directory is removed on the way out. The summary line reads
+   `signature and checksum verified`, or, with
+   `CAMY_REQUIRE_SIGNATURE=0`, `checksum verified` and
+   `signature NOT checked — you set CAMY_REQUIRE_SIGNATURE=0`.
    [Verifying releases](verifying-releases.md#what-the-installer-and-camy-update-check)
    covers what each check proves.
 4. **Stages and installs atomically.** The tarball is unpacked in a
@@ -81,10 +98,10 @@ The rc file is chosen from your `$SHELL`:
 | Variable | Effect |
 |---|---|
 | `CAMY_VERSION` | Install this exact version instead of whatever the channel's `VERSION` file currently points at. |
-| `CAMY_INSTALL_DIR` | Install to this directory instead of `~/.local/bin`. |
+| `CAMY_INSTALL_DIR` | Install to this directory instead of `~/.local/bin`. It must be an absolute path; the installer names the problem and stops otherwise. |
 | `CAMY_NO_MODIFY_PATH` | Set to `1` to skip both the `PATH` symlink and the rc-file edit. The script prints the export line for you to add yourself. |
-| `CAMY_REQUIRE_SIGNATURE` | Set to `1` to refuse to install unless `minisign` is installed to verify the release signature. |
-| `CAMY_DL_BASE` | Download from this base URL instead of `https://dl.camy.sh/stable`. The installer honors it unconditionally — pointing it at a mirror is how the script itself is retargeted. Once `camy` is installed, `camy update` treats `CAMY_DL_BASE` differently; see [Updating](#updating). |
+| `CAMY_REQUIRE_SIGNATURE` | The signature check is on by default. Set to `0` to install without `minisign`, protected by TLS and a checksum only (discouraged). |
+| `CAMY_DL_BASE` | Download from this base URL instead of `https://dl.camy.sh/stable`. It must be an `https://` address; plain `http://` is accepted only for `127.0.0.1`, `localhost` or `[::1]`. Pointing it at a mirror is how the script itself is retargeted. Once `camy` is installed, `camy update` treats `CAMY_DL_BASE` differently; see [Updating](#updating). |
 
 ```bash
 # Pin a version
@@ -115,7 +132,11 @@ channel by the tap's own workflow whenever a version ships, so
 
 A Homebrew-managed `camy` isn't updated or removed by `camy update` or
 `camy uninstall` — both detect a Homebrew install and point you at
-`brew upgrade camy` or `brew uninstall camy` instead.
+`brew upgrade camy` or `brew uninstall camy` instead. `camy update --check`
+still reports what's out, and names `brew upgrade camy` as the way to
+install it. Only a binary inside Homebrew's `Cellar` counts as
+Homebrew-managed: a `camy` copied straight into a Homebrew `bin` folder
+updates in place.
 
 ## npm
 
@@ -128,7 +149,8 @@ as an optional dependency (`@camy/cli-darwin-arm64` and its siblings), so
 nothing is downloaded when the package installs. `npx @camy/cli` works without a
 global install. Update with `npm update -g @camy/cli` and remove with
 `npm uninstall -g @camy/cli`; `camy update` and `camy uninstall` detect an npm
-install and point you at those. Packages are published by this repository's
+install and point you at those, and `camy update --check` still reports
+what's out. Packages are published by this repository's
 own [release workflow](../.github/workflows/release-mirror.yml) from the
 channel's verified tarballs, with npm provenance.
 
@@ -206,7 +228,8 @@ key to check with. [Troubleshooting](troubleshooting.md#start-with-camy-doctor)
 reads each row in full.
 
 [`camy version`](reference/camy_version.md) prints the installed version
-and platform, for example `camy v1.0.0 (darwin/arm64)`. Add `--json` for a
+and platform on stdout, for example `camy v1.0.6 (darwin/arm64)`, and a
+sentence about the local command sandbox on stderr. Add `--json` for a
 machine-readable object that also carries the build `commit`.
 
 ### Shell completions
@@ -272,6 +295,11 @@ reinstall with the installer and `CAMY_VERSION`; see
 [Troubleshooting](troubleshooting.md#when-the-new-version-doesnt-start).
 camy keeps one copy, and the next update replaces it.
 
+Run with `sudo`, `camy update` keeps that copy, and writes shell
+completions, only in folders that belong to root. When the update folder
+is yours, as it is when `sudo` keeps your `HOME`, the update still
+installs, but without a copy to put back if the new version doesn't start.
+
 If the channel has nothing newer than the binary you are running, `camy
 update` prints `up to date` and exits 0 without downloading anything. It
 never downgrades.
@@ -282,6 +310,10 @@ Check what's available without installing it:
 camy update --check
 camy update --check --json
 ```
+
+`--check` works on a Homebrew or npm install too. After `camy v<version> is out`
+it names `brew upgrade camy` or `npm update -g @camy/cli` rather than
+`camy update installs it in place`.
 
 Switch channels with `--channel`:
 
@@ -314,7 +346,10 @@ export CAMY_NO_UPDATE_NOTE=1
 
 `CAMY_NO_UPDATE_CHECK=1` is accepted as an alias of `CAMY_NO_UPDATE_NOTE=1`.
 The note never appears in `--json`/`--jq`/`--template` output, under
-`--quiet`, or when stderr isn't a terminal.
+`--quiet`, or when stderr isn't a terminal. On a Homebrew or npm install
+it names `brew upgrade camy` or `npm update -g @camy/cli`. When the
+channel can't be reached, camy tries again an hour later rather than
+waiting until the next day.
 
 ### When the install directory isn't writable
 

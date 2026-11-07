@@ -9,6 +9,345 @@ change to either that is not backward compatible bumps the major version.
 Each GitHub Release on this repository carries the same notes as its section
 below, plus the signed checksums for that version.
 
+## 1.0.6 — 2026-11-07
+
+**Downloads:** `curl -fsSL https://camy.ai/cli/install.sh | sh` · `brew tap
+trycamy/tap && brew install camy` · `npm install -g @camy/cli` · Camy for Mac:
+`Camy_1.0.6_darwin.zip` among the release's assets. See
+[Installation](docs/installation.md).
+
+This update has approvals act exactly on what you were shown, makes exit codes
+and `--json` output more exact for scripts, steadies chats, the full-screen
+app and the local bridge, adds crisis lines and the legal notice to the
+terminal, and hardens the local bridge and sign-in.
+
+**Compatibility**
+
+- `camy auth login` now asks for every scope camy's commands need, including
+  the one that lets this terminal offer its local tools. A key from an earlier
+  sign-in keeps its old scopes, so run `camy auth login` again after updating
+  to keep every command working; local tools keep working with an older key.
+  See [Scopes](docs/authentication.md#scopes).
+- `api_url`, `--api-url` and `CAMY_API_URL` now take only an `https://`
+  address, or `http://` for a local one such as `localhost`; anything else
+  exits 2, or is ignored with a warning when it comes from your config. If
+  your config or a profile sets `api_url` to an address other than
+  `https://api.camy.ai` or a local one, run `camy auth login --api-url <url>`
+  after updating, since commands exit 2 until you do; with `CAMY_API_KEY`,
+  pass `--api-url` or set `CAMY_API_URL` on each command instead. See [Where
+  your key is sent](docs/configuration.md#where-your-key-is-sent).
+- Exits 2, a usage error, for a malformed `--api-url` or `CAMY_API_URL` (was
+  1), for `camy help` on an unknown topic (was 0), and for a chat or schedule
+  id that matches none of yours (was 1). Update scripts that test the old
+  codes. See [exit 2](docs/exit-codes.md#2--usage-error).
+- Exits 7, unavailable, for `camy calls search`, `camy runs search`, `camy
+  jobs search` and linking a computer before that is on for your account (was
+  1), and for a device command on a Mac that isn't linked (was 2). See [exit
+  7](docs/exit-codes.md#7--unavailable).
+- Exits 3 for an action camy.ai takes only from your signed-in Camy app or
+  browser, such as `camy sweep set auto`, with a hint to do it there (was 1,
+  or 6 for billing). `camy vm resize` now stops this way at once, before it
+  asks anything, `--force` included; its help and `camy vm provision`'s now
+  say they are refused here. Move a scripted resize or provision to the Camy
+  app or camy.ai. See [Only in the Camy app or at
+  camy.ai](docs/troubleshooting.md#only-in-the-camy-app-or-at-camyai-exit-3).
+- Gives account refusals their own codes: an account scheduled for deletion
+  exits 3 (was 1) and names the date and how to cancel, one waiting for your
+  month and year of birth exits 2 and links where to answer, one closed
+  because Camy is only for adults exits 3, and an age check camy.ai can't make
+  just now exits 7. See [Account
+  refusals](docs/troubleshooting.md#account-refusals-exit-3) and [Usage
+  errors](docs/troubleshooting.md#usage-errors-exit-2).
+- Reports three outcomes that used to exit 0: `camy approvals approve` on a
+  checkpoint that already ran says `too late` and exits 1; a `camy feed act
+  <id> approve` that camy.ai didn't carry out exits 4 when camy.ai holds it
+  for another check, or 1 when it failed, expired or was stopped; and `camy
+  auth logout` exits 1, and says so, when the keychain keeps your key (`camy
+  uninstall` now says so too). See [Deciding](docs/approvals.md#deciding) and
+  [Acting on a card](docs/inbox.md#acting-on-a-card).
+- `camy api` now returns an answer up to 50 MB whole and exits 1 past that,
+  instead of printing the first 10 MB as text with exit 0. On any command, a
+  camy.ai answer cut off mid-way now fails as a connection error (exit 1) that
+  may have gone through, never as an empty success. See [exit
+  1](docs/exit-codes.md#1--runtime-or-api-error).
+- `camy connectors review` with no terminal now approves only with `--yes` or
+  `--force`, and otherwise exits 2; a script that piped `y` into it needs
+  `--yes` now. See [Review what
+  changed](docs/connectors.md#review-what-changed).
+- `camy schedule create` now refuses a time it can't read whole, such as
+  `9:00pm`, with exit 2, instead of scheduling 09:00 and exiting 0; write
+  `21:00`. See [Creating a schedule](docs/automation.md#creating-a-schedule).
+- `camy tasks add --due` now reads a time with no offset as this computer's
+  local time, and a bare date as local midnight, instead of as UTC; add an
+  offset or `Z` to send a UTC time. See [Tasks](docs/automation.md#tasks).
+- Fixes `--json` shapes; update scripts that read the old ones. `camy config
+  get --json` now prints `{"key", "value", "origin"}` instead of the bare
+  value, so read `.value`; `camy keys list --json` rows use `created_at` and
+  `last_used_at` in place of `createdAt` and `lastUsedAt`; and `camy ledger
+  --json`, `camy alias --json` and `camy local trust list --json` print `[]`
+  or `{}` for an empty list instead of `null`. See [`--json` and machine
+  mode](docs/scripting.md#--json-and-machine-mode).
+- `camy status --json`, `camy approvals show --json` and `camy auth status
+  --json` now print only their documented fields; for your workspace's full
+  record, use `camy vm status --json`. See [Listings, single things, and
+  ids](docs/scripting.md#listings-single-things-and-ids).
+- camy now stops with exit 1 when `HOME` isn't an absolute path, or when
+  `--profile` or `CAMY_PROFILE` isn't a plain name (letters, digits, `.`, `_`,
+  `-`); a `default_profile` in your config that isn't one is ignored, with a
+  note. See [exit 1](docs/exit-codes.md#1--runtime-or-api-error).
+- `editor` and `pager` in `config.toml` must now be a program name or an
+  absolute path followed by plain arguments: `camy config set` refuses
+  anything else, and a value already there is ignored, with a note each time
+  camy runs. Set a plain command, such as `camy config set editor "code
+  --wait"`. See [config.toml](docs/configuration.md#configtoml).
+- The install script now requires `minisign` and won't install a release whose
+  signature it can't check: install minisign first, CI included, or set
+  `CAMY_REQUIRE_SIGNATURE=0` to skip the check. `CAMY_DL_BASE` must be an
+  `https://` address (`http://` only for a local one), and `CAMY_INSTALL_DIR`
+  an absolute path. Homebrew, npm and `camy update` are unaffected. See
+  [Environment variables](docs/installation.md#environment-variables).
+- On Linux, a sandboxed command now has no network unless it is a tool that
+  fetches code or packages or connects to another machine (`git`, `npm`,
+  `pip`, `curl`, `ssh` and the like); one started through a wrapper such as
+  `sh -c` runs offline, and each command gets its own empty `/tmp`. See [The
+  boundary, and the
+  sandbox](docs/local-bridge.md#the-boundary-and-the-sandbox).
+- `--sandbox enforce` now refuses to run a command on a machine that can't
+  sandbox it, and says why; install bubblewrap from your distribution's
+  packages (Linux) or use `--sandbox observe`. See [Local commands and the
+  sandbox](docs/troubleshooting.md#local-commands-and-the-sandbox).
+- A card that asks to run a local command outside the sandbox now takes typing
+  `outside`; `y` refuses. Only a card where you typed `outside` runs a command
+  outside the sandbox. See [The approval
+  card](docs/approvals.md#the-approval-card).
+- camy now asks before working in your home folder, a folder above it, or one
+  that holds your shell's startup files or Camy's own settings; with no
+  terminal to ask, that run goes without local tools. Start camy from a
+  project folder to use them. See [The project
+  root](docs/local-bridge.md#the-project-root).
+- On a Mac forgotten with an earlier version, run `camy device uninstall` to
+  remove the leftover LaunchAgent. If your config sets `default_profile` to
+  another profile and an earlier version installed the agent for `default`,
+  run `camy device install` again to tie it to `default`. See [Run it in the
+  background](docs/device.md#run-it-in-the-background).
+
+**New**
+
+- Adds `camy crisis`, which lists the crisis lines for your country without
+  signing in; when your country's lines can't be loaded it prints the US lines
+  and a worldwide helpline finder, and still exits 0. When camy.ai includes
+  crisis lines with a reply, camy shows them after it, on stderr, and `-q`
+  doesn't hide them; under `--json` the `done` event carries them as `care`.
+  See [Crisis lines](docs/chat.md#crisis-lines).
+- Adds `camy legal notice` to read the current Terms of Service and Privacy
+  Policy notice. Until you have read it, a command run at a terminal while
+  signed in reminds you on stderr at most once a day, never under `--json` or
+  `--no-input`. See [camy legal notice](docs/reference/camy_legal_notice.md).
+- `camy chat`, `camy --inline` and a one-shot turn now say that Camy is an AI,
+  not a person; a one-shot turn says it on stderr, never under `--json`, and
+  `-q` doesn't hide it. See [One-shot chat](docs/chat.md#one-shot-chat).
+- Every chat surface, the full-screen app included, now shows camy.ai's
+  reminder lines when it sends them, `--json` `start` and `done` events carry
+  `ai_notice` when camy.ai sends one, and `camy --help` closes with a note
+  that Camy is an AI. See [NDJSON for
+  streams](docs/scripting.md#ndjson-for-streams).
+- `camy chat`'s trailer now names the tier that ran, or `quick → agent` when
+  the turn moved, and `--json` `done` events add `tier_requested`,
+  `tier_effective` and `tier_reason` when camy.ai reports them. See [Mode:
+  agent or quick](docs/chat.md#mode-agent-or-quick).
+- `camy auth status` now counts the scopes your key holds and lists them under
+  `scopes` in `--json`; it and `camy doctor` say when the key can't run
+  commands on your cloud computer. See [`camy auth
+  status`](docs/authentication.md#camy-auth-status).
+- `camy vm status` now names your workspace's size and what it costs in
+  credits per hour, such as `plus · 15 credits/h`, or the instance type when
+  it can't read the size. See [`camy vm
+  status`](docs/workspace.md#camy-vm-status).
+- Adds `camy profile list`; it and `camy profile` list `default` first, then
+  the rest by name, a profile you signed in to with `camy auth login
+  --profile NAME` included. See [List
+  profiles](docs/configuration.md#list-profiles).
+
+**Improvements**
+
+- Approving or declining now acts on a request exactly as camy showed it to
+  you, on its card, in `camy approvals show` or in a `--json` listing; if it
+  has changed since, nothing runs, and camy exits 4 and points you back at the
+  request to look again. An id camy never showed is answered as it stands, and
+  `camy approvals --json` rows carry `action_version` when the request has
+  one. See [Deciding](docs/approvals.md#deciding).
+- An approval prompt now closes as soon as the card is decided elsewhere, a
+  sentence typed at a `y/N` prompt is no longer taken as a no, a choice card
+  takes several picks only when the question asks for several, as in the
+  iPhone app and on the web, and a card that asks several questions asks
+  each in turn; its `--json` `checkpoint` event lists them as `fields`. See
+  [The approval card](docs/approvals.md#the-approval-card).
+- `camy approvals show` now draws the whole card in plain words, numbers a
+  choice card's options, and shows a local command or file change as the
+  command or a diff. A card for an email draft no longer reads as a send, and
+  a connector tool's name no longer ends in a stray code. See [Listing and
+  reading](docs/approvals.md#listing-and-reading).
+- A headless turn that stops on a question now points at `camy approvals
+  answer`, in the `--json` hint too. `approve --wait` and `answer --wait` take
+  the short chat id `camy chats` prints, and they and `camy chat attach` now
+  end with the reply once an approved cloud action finishes. See [Streaming
+  with `--wait`](docs/approvals.md#streaming-with---wait).
+- Fixes chat turns that hung on a local action that never started or that you
+  stopped mid-run, and `still running on your machine…` no longer lands inside
+  a reply.
+- A reply camy.ai corrects after streaming now prints once, and when the
+  model restarts an answer, the full-screen app drops the abandoned attempt,
+  or says how much above came from it once it has settled, and piped or
+  accessible-mode output says so on stderr. Under `--json`, a correction that
+  rewrites text already streamed is a `retry` event with reason `replace`.
+  See [NDJSON for streams](docs/scripting.md#ndjson-for-streams).
+- `camy chat` now works in a folder with a large `AGENTS.md` or many files,
+  and stops at once with exit 3 when the key lacks `chat:read`, with `camy
+  auth login --scopes +chat:read` as the hint. A key that can't let this
+  computer offer local tools now says so once instead of doing nothing. See
+  [Scopes](docs/authentication.md#scopes).
+- A `y` to `resume?` that resumed nothing now says why when the chat was
+  already running a turn or the hold was gone. A resume card answers only for
+  the held turn it was drawn for, and an offer camy.ai withdraws is no longer
+  drawn. See [An interrupted turn, offered
+  back](docs/chat.md#an-interrupted-turn-offered-back).
+- `camy chat --temp`'s help now says a temporary chat isn't saved to your
+  history or memory, and when camy.ai keeps a 30-day safety copy, the chat
+  says so as it starts at a terminal. See [Continuing, targeting, and
+  temporary chats](docs/chat.md#continuing-targeting-and-temporary-chats).
+- An `--attach` folder or file over 50 MB now stops the send with exit 2
+  before a chat is created, and an unreadable one no longer leaves an empty
+  chat behind; a `--chat` id camy.ai refuses no longer breaks `camy chat -c`,
+  and `camy chats --all` and `-L` work as the footer suggests. A `-L` you pass
+  now limits `camy chats list --json` too; without it, `--json` still returns
+  every chat. See [Attachments](docs/chat.md#attachments).
+- `camy chat` now cuts piped input past 2 MB at a line break and says so in
+  the `stdin ·` note, except under `--json` or `-q`. See [stdin as
+  context](docs/chat.md#stdin-as-context).
+- Piped and accessible-mode replies leave out cards' layout lines and
+  suggestion chips, and a turn waiting on a question reads `waiting for your
+  answer`.
+- Links in replies now print as `label (url)` under `NO_COLOR`, `CLICOLOR=0`
+  or `--color never`, and a shortened table cell keeps its link and colour.
+  See [Hyperlinks](docs/terminal.md#hyperlinks-osc-8).
+- `--color always`, `FORCE_COLOR` and `CLICOLOR_FORCE` now give 16 colours
+  when `TERM` is empty, and a 5-second wait before every command on a terminal
+  that never answers colour queries, such as `docker run -t`, is gone. A camy
+  command started as a background job, such as `camy status &`, no longer
+  stops until you bring it back with `fg`. See
+  [Color](docs/terminal.md#color).
+- `camy --version` now prints one line on stdout, with the sandbox note on
+  stderr, so `$(camy --version)` captures the version alone, and `camy mode`
+  now prints on stdout. `-v` prints one line per request on stderr with its
+  method, path, status, time and request id, `-q` also hides the notes printed
+  before a command starts, and a bad flag is reported as a JSON error when
+  `--json` is on the command line. See [Quiet
+  mode](docs/scripting.md#quiet-mode).
+- Steadies the full-screen app: a message after a stopped turn sends, even
+  when the app had rejoined that turn, several slash commands no longer
+  freeze or crash it, a message that can't go out says so and ↑ brings it
+  back, and a `/queue` message a turn didn't use goes back to `/queue`.
+  `/attach` now rejoins a turn that is still running, and `/capture` points
+  you at `camy capture` instead of saving without asking. See [Slash
+  commands](docs/chat.md#slash-commands).
+- The full-screen app re-wraps the transcript when the window is resized,
+  wraps a long URL instead of cutting it off, keeps the cursor in view and the
+  masthead on screen when you scroll up, and shows the last exchange of the
+  chat it resumes; Ctrl-D on an empty composer leaves. In `/approvals`, `a`
+  shows each marked approval before one `y` approves them all.
+- The full-screen app's status row and `camy status` no longer show `ctx 0%`
+  before a turn has a reading, and in accessible mode Ctrl-C at the prompt
+  leaves with the goodbye line, as Ctrl-D does.
+- Camy's file changes on your computer keep a file's line endings and byte
+  order mark and add no stray blank lines, the card says when only line
+  endings or the final newline change, and a write that asks for a file mode
+  camy can't read is refused, not written without it. See [Writes and
+  edits](docs/local-bridge.md#writes-and-edits).
+- The agent's local search finds matches after very long lines, names the
+  dependency, build or hidden folders it skipped, searches inside one when
+  pointed there, and reports no matches as an empty result, not a failure. It
+  no longer reads a file with one huge line all at once, and local tools no
+  longer refuse every file in a project because of its folder's name. See
+  [Read-only scope](docs/local-bridge.md#read-only-scope).
+- A local command that runs without asking at a terminal now also runs under
+  `--no-input`, under `--json` and in pipes, instead of stopping the turn with
+  exit 4, and `python3 -m <module>` can be trusted. `camy local trust remove`
+  applies at once in every running session. See
+  [Trust](docs/local-bridge.md#trust).
+- The trace line for a call on your computer now names the file, search
+  pattern or command, and says why a call failed. See [What the agent can
+  touch](docs/local-bridge.md#what-the-agent-can-touch).
+- Fixes sandboxed commands that all failed on a Linux machine where bubblewrap
+  can't start or there is no `~/.cache`; on macOS, sandboxed commands can
+  write to `/dev/null` and their own output again.
+- `camy device forget` now stops this Mac's running agent and removes its
+  LaunchAgent, so macOS no longer restarts it every 10 seconds after your next
+  login; `--json` gains `launch_agent_removed`. `camy device install` now runs
+  the profile it was installed for, `default` included. `camy stop` now holds
+  even when the agent checks in with Camy just after it, and it and `camy
+  device status` no longer treat an agent that crashed as running. On a Mac
+  whose screen is locked, or where no one is logged in at the desktop, a
+  device command that needs the Secure Enclave now says so instead of failing
+  with an unexplained error. See [Take it back](docs/device.md#take-it-back).
+- `camy auth login --with-key` now checks a pasted key before it replaces
+  yours, so a bad key leaves you signed in, and `--scopes` refuses `-<scope>`
+  for a scope it doesn't know instead of asking for the whole default set. See
+  [`--with-key`](docs/authentication.md#--with-key-paste-an-existing-key).
+- Says plainly when Camy or publishing isn't available in your country or
+  region, instead of `blocked at the edge or forbidden` (still exit 1), and an
+  error from camy.ai that already says to try again no longer repeats it.
+- `camy api` with POST, PUT or PATCH no longer hangs on an open stdin that
+  sends nothing. See [`camy
+  api`](docs/scripting.md#camy-api-the-escape-hatch).
+- `camy schedule` no longer lists a cron that runs at several hours a day as a
+  single daily time, shows the next hourly run on the hour in half-hour and
+  45-minute time zones, and keeps the typed time for a daily or weekly
+  schedule whose first day skips it for daylight saving. At the limit on
+  active schedules, `camy schedule create` and `resume` say so instead of
+  `rate limited`, still with exit 5.
+- `camy vm apps` now leaves out the workspace's own system processes; `--json`
+  still lists them all. `camy vm exec` refuses a command over 4,096 characters
+  with exit 2 before waking the workspace, a `camy vm shell` the workspace
+  closed at its time limit points you at `camy vm shell` to open a new one,
+  and no message suggests `camy vm provision` any more. See
+  [Workspace](docs/workspace.md).
+- `camy plan` and `camy status` now show the same credit balance, `camy
+  status` counts the same approvals `camy approvals` lists, `camy capture`
+  says where a capture went and prints its id, and `camy inbox show` finds an
+  id from any `--tab` view. A `CAMY_API_KEY` that holds only whitespace no
+  longer hides your stored key, and a form's number field asks again for `nan`
+  or `inf`.
+- `camy sweep` no longer offers `camy sweep set auto` as the next step, and
+  `camy sweep set auto --dry-run` says the terminal can't make that move. See
+  [Modes](docs/inbox.md#modes).
+- `camy inbox reply --send` now refuses an empty reply, such as an editor
+  emptied under `--edit` or a `--body` of only spaces, with exit 2, instead
+  of queueing one that sends only the quoted message. See
+  [Replying](docs/inbox.md#replying).
+- Aliases now honour `--profile` and `--api-url` in their expansion. See
+  [Aliases](docs/configuration.md#aliases).
+- Ctrl-C in the editor that `--edit` opens goes to the editor, and Ctrl-C
+  during `camy download`, `camy device enroll` or a `camy auth login` that
+  links this Mac removes the partly written file. Ctrl-C at a prompt that
+  hides what you type, such as the key prompt of `camy auth login
+  --with-key`, no longer leaves your terminal that way. `camy download` saves
+  files readable only by you, and a download that fails leaves an existing
+  file as it was.
+- `camy update --check` now works on Homebrew and npm installs and names their
+  update command, as does the daily new-version note. The note tries again an
+  hour after a failed check instead of going quiet for a day, and stays quiet
+  after a successful `camy update` instead of naming the version just
+  installed. A camy placed in `/opt/homebrew/bin` by other means is no longer
+  taken for a Homebrew install. A new version that doesn't start is now
+  rolled back even after an earlier update stopped part-way. See
+  [Updating](docs/installation.md#updating).
+
+**Security**
+
+- Hardens how camy handles your key, the files it writes and the commands Camy
+  runs on your computer, and masks more secrets in what it shows. A few local
+  commands that ran on their own now ask first. Updating is recommended.
+
 ## 1.0.5 — 2026-09-27
 
 This update keeps a linked Mac working on its own, makes sign-in, keys and

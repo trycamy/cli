@@ -65,16 +65,21 @@ camy connectors review <name> --yes --json
 A tool server can change the tools it offers after you approved it, and
 what changed stays off until you look. `review` shows what changed since
 your approval; when Camy can't tell which tools changed, it lists the
-server's current tools instead. Then it asks `approve changes? [y/N]`. Yes
-approves the new set and turns every tool you kept back on; anything else
-leaves the changes off. A server with nothing to review says so and asks
-nothing.
+server's current tools instead. Then it asks `approve changes? [y/N]` on
+your terminal. Yes approves the new set and turns every tool you kept back
+on; anything else, Enter included, prints
+`later — they stay off until you approve` and leaves the changes off. A
+server with nothing to review says so and asks nothing.
 
-`--yes` approves without asking, and so does `--force`. Without either,
-nothing is approved on a script's behalf: under `--no-input`, `review`
-lists what changed, and under `--json` it prints nothing on stdout; both
-then exit 2 with a message such as
-`approving Linear's tool changes needs confirmation`.
+The answer is read from the terminal itself, never from standard input,
+so piping `y` into `review` approves nothing. `--yes` approves without
+asking, and so does `--force`. Without either, nothing is approved on a
+script's behalf: under `--no-input`, or with no terminal to ask on,
+`review` lists what changed, and under `--json` it prints nothing on
+stdout; each then exits 2 with a message such as
+`approving Linear's tool changes needs confirmation`. A script that used to
+pipe `y` into `review` needs `--yes` now.
+
 With `--yes` or `--force`, `--json` approves the server's current tools
 and prints the connection as camy.ai returns it. On a server with nothing
 to review, `--json` prints the connection as listed and approves nothing.
@@ -136,4 +141,5 @@ remove the server from Settings → Connections on camy.ai instead.
 ## See also
 
 - [`camy connectors`](reference/camy_connectors.md) in the reference
-- [Approvals](approvals.md), the pauses a connector's actions can trigger
+- [Approvals](approvals.md), the pauses a connector's actions can trigger,
+  and [how a connector write's approval box reads](approvals.md#the-approval-card)

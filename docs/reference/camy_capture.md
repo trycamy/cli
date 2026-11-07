@@ -1,6 +1,6 @@
 ## camy capture
 
-Anything on stdin (or argv) lands in Camy's memory intake
+Save text from stdin or arguments to Camy
 
 ```
 camy capture [TEXT | -] [flags]

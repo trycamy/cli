@@ -1,6 +1,13 @@
 ## camy vm provision
 
-Provision (or reconcile) your workspace
+Refused here: set up your workspace in the Camy app or at camy.ai
+
+### Synopsis
+
+camy.ai sets a workspace up only from your signed-in Camy app or browser, never
+with an API key, and the terminal signs in with an API key. So this stops
+with exit 3 and camy.ai's reason, before anything changes.
+Set one up in the Camy app or at camy.ai.
 
 ```
 camy vm provision [flags]

@@ -54,8 +54,8 @@ camy vm shell                    a live shell
 * [camy vm exec](camy_vm_exec.md)	 - Run a command on your workspace — the remote exit code becomes your exit code
 * [camy vm logout-everywhere](camy_vm_logout-everywhere.md)	 - Log your computer out of every site: forget saved logins, clear its browser, stop its tasks
 * [camy vm ls](camy_vm_ls.md)	 - Every VM you own, across roles
-* [camy vm provision](camy_vm_provision.md)	 - Provision (or reconcile) your workspace
-* [camy vm resize](camy_vm_resize.md)	 - Resize the workspace in place — data survives; downgrades are refused server-side
+* [camy vm provision](camy_vm_provision.md)	 - Refused here: set up your workspace in the Camy app or at camy.ai
+* [camy vm resize](camy_vm_resize.md)	 - Refused here: resize your workspace in the Camy app or at camy.ai
 * [camy vm shell](camy_vm_shell.md)	 - A live PTY on your workspace — resize and all
 * [camy vm sizes](camy_vm_sizes.md)	 - Available workspace sizes, credits, and the GPU add-on
 * [camy vm start](camy_vm_start.md)	 - Start the workspace (blocks until it's actually ready)

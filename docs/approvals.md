@@ -23,8 +23,8 @@ A checkpoint pauses one of four kinds of thing:
 
 - an **approval** — a plain yes/no, most often a local command or file write
 - a **question** — free text
-- a **choice** — pick from a list (one or several, depending on the card),
-  or type your own answer when the card allows it
+- a **choice** — pick from a list (one, or several when the question asks
+  for several), or type your own answer when the card allows it
 - a **form** — a few fields, filled in one at a time
 
 Nothing runs on a timeout. A checkpoint nobody decides is never approved and
@@ -37,9 +37,9 @@ One carve-out: a local command the CLI can itself verify is read-only and
 confined to your project root, or one covered by a grant you added with
 [`camy local trust`](reference/camy_local_trust.md) or by the exact grant
 `a` records, is answered automatically on a turn camy.ai has marked eligible
-for auto-answering (a verified read may also arrive with no card at all);
-otherwise it gets a card like any other — see
-[The local bridge](local-bridge.md).
+for auto-answering (a verified read may also arrive with no card at all),
+at a terminal or under `--no-input` alike; otherwise it gets a card like
+any other — see [The local bridge](local-bridge.md).
 
 ### Checkpoint ids
 
@@ -49,9 +49,13 @@ id, or the full id. The list lengthens a short id past four characters only
 when two pending checkpoints would otherwise share it. `--ids=hex` prints the
 older untyped 8-character form instead, for this release.
 
-- A prefix that matches nothing is passed straight to the API by `approve`,
-  `deny` and `answer`, which report it as not found; `show` instead fails
-  locally with "no pending checkpoint …".
+- A short id or prefix that matches no pending checkpoint is looked up by
+  `approve`, `deny` and `answer` among the checkpoints this profile listed
+  or decided recently, so one that has run since still answers by its short
+  id. One never seen is passed straight to the API, which reports it as not
+  found. `show` instead fails locally with "no pending checkpoint …". For
+  a typed short id it names the hex part without the `ap_` prefix
+  (`ap_789a` comes back as `789a`).
 - A prefix that matches more than one pending checkpoint is a usage error
   asking for a longer one.
 
@@ -70,9 +74,11 @@ what it wants in plain words, the detail, where the bite would land and how
 bad (`⌂ this machine · low · reversible`,
 `✉ leaves camy · high · not undoable`), and how long ago it arrived.
 Repeats of the same question collapse into one row with a count and a date
-range, and the list ends in the verbs that apply to its rows.
-With nothing pending it prints "no approvals waiting — the leash is slack"
-and exits 0.
+range, and the list ends in the verbs that apply to its rows. A connector
+tool is named in plain words (`Linear · create issue`). An email draft the
+agent saves without sending reads `saves a draft in your mailbox` and isn't
+filed under WANTS TO SEND SOMETHING. With nothing pending it prints
+"no approvals waiting — the leash is slack" and exits 0.
 
 An approval you already gave can stay on camy.ai's list while its tool
 runs. Nothing is left to decide on it, so the list leaves it out and its
@@ -102,10 +108,12 @@ Two holds with different totals never collapse into one row.
 instead of printing the list.
 
 [`camy approvals show`](reference/camy_approvals_show.md) prints the
-checkpoint in full — the complete prompt, not the truncated summary from the
-list — so you can read exactly what you'd be approving. Read a checkpoint
-you don't recognize with `show` rather than deciding from the list line
-alone.
+checkpoint in full — the whole card, never capped, not the truncated
+summary from the list — so you can read exactly what you'd be approving.
+It numbers a choice card's options, so `camy approvals answer ID` can name
+one, and shows a command on your machine as the command, a file write as
+its path and contents, and an edit as `-`/`+` lines. Read a checkpoint you
+don't recognize with `show` rather than deciding from the list line alone.
 
 ## Deciding
 
@@ -168,6 +176,23 @@ camy: that checkpoint was already decided somewhere else — your approval chang
       camy approvals lists what's still waiting
 ```
 
+Approving a checkpoint that already ran, by its short id or its full id,
+says so the same way and exits 1; with `--wait` it returns at once:
+
+```text
+camy: too late — it was already approved and ran; your approval changed nothing
+      camy approvals lists what's still waiting
+```
+
+`approve` and `deny` act only on the version of the request you were
+shown: on its card, in `camy approvals show`, or in a `--json` listing
+(the table's one-line row doesn't count; camy remembers what it showed you
+for a day). If the request was edited somewhere else since, nothing runs
+and the checkpoint keeps waiting: camy prints camy.ai's own sentence,
+points you at `camy approvals show` with the checkpoint's id so you can
+read it again, and exits 4. An id nothing printed acts on the request as it
+stands.
+
 Denying a checkpoint that had already expired or been cancelled still
 succeeds, since nothing runs either way. When the checkpoint still waits on
 an approval, the command exits 4 and names the checkpoint it waits on when
@@ -183,9 +208,18 @@ write. `deny` prints
 
 The full-screen app's [`/approvals` picker](chat.md#slash-commands) reads
 camy.ai's answer the same way. A question there gets an answer box, never a
-yes, and a bulk approve skips questions and says so. A checkpoint settled
-somewhere else leaves the list with camy.ai's account as its note, and one
-camy.ai still holds open stays.
+yes, and a bulk approve skips questions and says so. `a` on the rows you
+marked first shows what each one will do, with the rows its own card
+shows, then asks once:
+
+```text
+approve all 3? y approves them · anything else goes back
+```
+
+`y` approves exactly the approvals shown, and any other key returns to the
+list with your marks kept. A checkpoint settled somewhere else leaves the
+list with camy.ai's account as its note, and one camy.ai still holds open
+stays.
 
 `camy approvals deny` always exits 0 on success: it succeeded at telling the
 agent no. Exit code 8 (checkpoint denied) is a different signal — within the
@@ -200,7 +234,7 @@ that can return 8.
 
 ```bash
 camy approvals approve a1b2c3d4 --wait
-camy approvals answer a1b2c3d4 "use option B" --wait --chat 9f8e7d6c
+camy approvals answer a1b2c3d4 "use option B" --wait --chat ch_9f8e
 ```
 
 It stays attached after responding and streams the resumed turn to your
@@ -208,7 +242,10 @@ terminal, instead of just confirming the checkpoint was cleared. `--wait`
 follows one turn, so `approve --wait` takes a single id; naming several is a
 usage error (exit 2).
 
-`--wait` attaches to the chat named by `--chat ID`. Without it, it attaches
+`--wait` attaches to the chat named by `--chat ID`, which takes the short
+chat id `camy chats` prints or a full one. A `--chat` that matches no chat
+stops the command with exit 2 (`no chat matches …`) before anything is
+approved or answered. Without it, `--wait` attaches
 to the chat the checkpoint belongs to (for a delegated agent's checkpoint,
 the chat that delegated it), and when camy can't read that, to the last chat
 you were in on this profile. With none available, it prints a note and exits
@@ -223,9 +260,16 @@ asynchronously, so the CLI waits up to 120 seconds before it trusts that the
 turn is actually idle rather than just not-yet-resumed.
 
 It then keeps waiting on a "paused" state, up to a total of ten minutes from
-the approve — the turn may be waiting on a different checkpoint, possibly
-one being decided in your other open session, and it says so once. Budget up
-to about ten minutes worst case before `--wait` either finishes or gives up.
+the approve, and says so once. For a command on your machine it prints
+`waiting — the command is being decided in your other open camy session`.
+For an action in the cloud it prints
+`still running — the reply follows when it finishes`. Both lines appear
+only in human mode. Budget up to about
+ten minutes worst case before `--wait` either finishes or gives up.
+
+When the resumed turn's reply is stored but its stream never reaches this
+process, `--wait` finds the stored reply, prints it as the stream would
+have, and exits 0, rather than waiting on.
 
 If the checkpoint's own outcome reaches a terminal state — completed,
 failed, rejected, expired, cancelled — `--wait` reports it and exits
@@ -254,51 +298,84 @@ where the bite lands (`lane`), how bad (`risk`), where it came from
 it is its own line beneath the card, with its keys, and
 `[y/N/o(pen web)]` is unchanged.
 
-The body shows the summary, capped at a few lines, with a
-"… +N more — o opens the full card" marker when it runs long. For a local
-command it shows the verbatim command instead, wrapped but never
-truncated, so nothing risky can hide past a cutoff. A command card can also
-state how this machine confines commands, the same sentence
-`camy --version` prints, but only once per connection: the first command
-card you actually see may not carry it if an earlier one was answered for
-you, so `camy --version` is the dependable place to read it. A local file
-write shows the verbatim path the same way, then what the write would actually change:
-when the file already exists, a diff against the copy on disk,
-capped with an "o opens the full card" note if it runs long, or a line
-saying the file already has these contents, or why no diff could be read.
-When the file is new there's nothing to diff against, so the card shows its
-line count and size instead. Whenever no diff is shown — a new file, or a
-diff that couldn't be read — a preview of the proposed content follows.
+The body shows the summary as plain text, without markdown marks (a link
+keeps only its label; `--json` keeps the original text), capped at a few
+lines, with a "… +N more — o opens the full card" marker when it runs long.
+For a local command it shows the verbatim command instead, wrapped but never
+truncated, so nothing risky can hide past a cutoff: each argument quoted the
+way a shell reads it back, with any control or invisible character spelled
+out. When the command runs in a folder other than the project root, the card
+names it (`runs in <folder> — your real computer, not the cloud VM`). When
+the run would get more than the usual sandbox, an amber line under the
+command says so; see
+[The boundary, and the sandbox](local-bridge.md#the-boundary-and-the-sandbox).
+A command card can also state how this machine confines commands, the same
+sentence `camy --version` prints, but only once per connection: the first
+command card you actually see may not carry it if an earlier one was
+answered for you, so `camy --version` is the dependable place to read it. A
+local file write shows the verbatim path the same way, then what the write
+would actually change: when the file already exists, a diff against the
+copy on disk, capped with an "o opens the full card" note if it runs long,
+or why no diff could be read. When the diff is empty the card says the file
+already has these contents, or that only its line endings or its final
+newline change, for example
+`only line endings change — LF (\n) becomes CRLF (\r\n)`. When the file is
+new there's nothing to diff against, so the card shows its line count and
+size instead. Whenever no diff is shown — a new file, or a diff that
+couldn't be read — a preview of the content that will be written follows.
+When the write asks for a file mode, a `mode 0755`-style row shows it, with
+the caution `other accounts on this computer could change this file` when
+the mode lets them.
 
 A local edit, which changes part of an existing file, gets the same body:
 the path, then the diff the edit would make against the copy on disk, under
 the same cap. When that diff can't be computed, for example because a
 search block no longer matches the file, the card says why where it can,
 and shows the proposed search-and-replace blocks instead. A write or edit
-to a file that runs on its own, such as a git hook, a CI workflow,
-`package.json`, or a `Makefile`, carries a warning line under the path.
+to a file that runs on its own, such as a git hook or git config file, a CI
+workflow, `package.json`, or a `Makefile`, carries the warning
+`this file runs on its own — read every line` under the path.
+
+A connector write draws as a box headed by the connection and what the tool
+does, in plain words (`Linear · create issue`), with one row per value as
+it will be sent. A value longer than 600 characters is cut and ends
+`… (+N chars)`, and the box then says a value is cut short there and that
+`camy approvals show ID --json` prints it whole, a queued write's box
+included. camy draws a connector box only for an
+approval camy.ai marks as a connector write. Every other approval,
+including an email, a calendar write, or a payment, shows its arguments on
+the plain card, each long value cut the same way.
 
 What answers it depends on the kind:
 
 | Kind | Prompt | What counts |
 |---|---|---|
-| Approval | `approve? [y/N/o(pen web)]` | `y`/`yes` approves; `o` prints a link to the checkpoint's chat at camy.ai, or to For You when it has no chat (a clickable hyperlink where the terminal supports one), and asks again; anything else, including nothing typed, denies. |
+| Approval | `approve? [y/N/o(pen web)]` | `y`/`yes` approves; `o` prints a link to the checkpoint's chat at camy.ai, or to For You when it has no chat (a clickable hyperlink where the terminal supports one), and asks again; an answer with a space in it, such as a sentence, isn't taken as an answer, and the prompt asks again; anything else, including nothing typed, denies. |
 | Approval, a local `run_command` card | `y run · N deny · a always · o web` | as above, plus `a` — see below. |
+| Approval, a local command that would run outside the sandbox | `run it outside the sandbox? type outside to approve, anything else to refuse` | only `outside`, in any case, approves; `y`, `a`, and nothing typed refuse, and no `a` grant is offered. |
 | Approval, a connector write | `approve? [y/N/a(lways for this tool)/o(pen web)]` | as above, plus `a`: it approves and tells Camy to stop asking before that tool runs in that connection, which you can undo in Connections. A destructive tool's card doesn't offer `a`, and a typed `a` there denies. |
 | Question | `answer (empty rejects):` | anything typed answers; nothing typed rejects. |
-| Choice | `pick (1 or 1,3) or type — empty rejects:` | a number or comma-separated numbers picks by position, and an option's id or label picks it too; other text is sent as free text; nothing typed rejects. The prompt offers only what the card takes: `pick (1)` on a card that takes one pick, and no `or type` on one that takes no free text. A number that isn't an option, two picks on a one-pick card, or text the card can't take is refused with the options listed, and the card asks again. |
-| Form | one prompt per field | a required field re-prompts if left blank; an optional field may be left blank. |
+| Choice | `pick (1 or 1,3) or type — empty rejects:` | a number or comma-separated numbers picks by position, and an option's id or label picks it too; other text is sent as free text; nothing typed rejects. A card takes several picks only when the question asks for several. The prompt offers only what the card takes: `pick (1)` on a card that takes one pick, and no `or type` on one that takes no free text. A number that isn't an option, two picks on a one-pick card, or text the card can't take is refused with the options listed, and the card asks again. |
+| Form | one prompt per field, in order; a card that asks several questions at once is a form with one field per question | a required field re-prompts if left blank; an optional field may be left blank. A value the field can't take, such as a word in a number field (`nan` and `inf` included), prints why and asks for that field again. A field that takes one pick from its options lists them numbered (`pick 1-N`) and asks again for anything else; one that takes several picks or free text shows its options after the question and takes any text. A field that asks for a file is skipped: the terminal can't attach a file to a card. Each answer goes back to its own question. |
 
 Prompts read `/dev/tty` directly, never stdin — piping input at a
 [`camy chat`](reference/camy_chat.md) turn (`echo y | camy chat "..."`) can
-never answer a checkpoint, by design. Every piece of server text shown on a
-card — the summary, choice labels, field descriptions — is sanitized before
-it reaches your terminal.
+never answer a checkpoint, by design. Anything typed before a prompt
+appears is discarded, so only keys you press once you can see the card
+answer it. Every piece of server text shown on a card — the summary,
+choice labels, field descriptions — is sanitized before it reaches your
+terminal.
+
+When the card is approved somewhere else while its prompt is up, on the web,
+in the app, or in another terminal, the prompt closes on its own, prints
+`approved elsewhere`, and the turn goes on with what that decision started.
+A denial, an answer, or an expiry somewhere else closes it the same way,
+without the note.
 
 Your answer is judged by what camy.ai says came of it. The `✓` line appears
 only for an answer camy.ai took, and says `— the turn resumes` only when a
-paused turn does. When the checkpoint was settled somewhere else while its
-card was up, for example approved on the web before you typed `n`, camy
+paused turn does. When the checkpoint was settled somewhere else just as
+you answered, for example approved on the web as you typed `n`, camy
 prints camy.ai's account instead and the turn keeps streaming:
 
 ```text
@@ -309,11 +386,14 @@ too late — it was already approved and is running; your denial changed nothing
 
 `a` approves the checkpoint and grants this exact command for this project,
 and records a dated family grant beside it for commands of the same shape —
-see [Trust](local-bridge.md#trust). It is offered only when the command
-isn't destructive or content-unvetted. Where it isn't offered, `a` is not a
-no-op:
+see [Trust](local-bridge.md#trust). The grant is saved once camy.ai accepts
+the approval; an approval camy.ai refuses saves nothing. It is offered only
+when the command isn't destructive or content-unvetted. Where it isn't
+offered, `a` is not a no-op:
 
 - On a destructive command it denies the checkpoint outright.
+- On a command that would run outside the sandbox it refuses, like any
+  answer other than `outside`.
 - On a content-unvetted one — a script run through an interpreter — it
   approves this one run without granting anything.
 - On a connector write it does what the connector row above says.
@@ -342,7 +422,10 @@ card camy draws in your terminal.
 Outside a real interactive session a checkpoint is never prompted: it's left
 pending, and the command that hit it fails closed. That covers `--no-input`,
 machine mode (`--json`/`--jq`/`--template`, even on a real TTY), and a
-process with no controlling terminal.
+process with no controlling terminal. Under `--no-input` or with no
+controlling terminal, a local command that would run without asking at a
+terminal, a verified read or one this project trusts, runs without asking
+too instead of stopping the turn.
 
 ```bash
 camy --no-input chat "clean up the build directory"
@@ -362,6 +445,15 @@ clearing the checkpoint:
 
 ```bash
 camy approvals approve <checkpoint id> --wait
+```
+
+A question is answered, never approved, so a turn that stops on one points
+you at `answer` instead, in its human message and in the JSON error's
+`message` and `hint`:
+
+```text
+checkpoint <id> is a question — it's answered, never approved:
+  camy approvals answer <id> "…"
 ```
 
 A temporary chat (`--temp`) can never hold an approval at all. Hitting a
@@ -393,7 +485,9 @@ approval. That's true even when the checkpoint is cleared somewhere else:
   way: it clears the checkpoint, but a local command, write, or edit still
   needs a live camy session on the machine it targets.
 - When the camy app picks the resumed turn back up, it shows the card again
-  — "approved elsewhere · run it here?" — rather than executing silently.
+  — "not approved on this screen · run it here?" — rather than executing
+  silently. A command confirmed there runs inside the sandbox, whatever
+  the original card asked for.
   Only a session that itself witnessed a decision (a keystroke on a card, a
   trusted auto-run, a read-only command the CLI verified itself,
   `approve --wait`, or a live re-confirm like this one) is allowed to run a
@@ -440,6 +534,11 @@ checkpoint's `family` is `"checkpoint"` and its `subject_id` is its
 `expires_at` are filled from the decision. The checkpoint verbs can't act on
 it, so filter on `family` before piping `checkpoint_id` into `approve`.
 
+A row also carries `action_version` when the request has one: the version
+of the request the row shows. Reading the list with `--json` counts as being
+shown it, so a following `approve` or `deny` acts only on that version, as
+[Deciding](#deciding) describes.
+
 `status` is `pending` for a checkpoint still waiting on you, or `executing`
 for an approval already given whose tool is still running; the human list
 leaves executing rows out. A checkout hold's row also carries `merchant` and
@@ -454,8 +553,11 @@ leaves executing rows out. A checkout hold's row also carries `merchant` and
 
 ### `camy approvals show ID --json`
 
-The full, unfiltered server row for that one checkpoint. It is not the same
-shape as the list; don't assume the two match field for field.
+The list's shape for that one checkpoint, plus, when camy.ai sends them,
+the fields you need to answer it: `message_id`, `description`,
+`risk_level`, `choices`, `input_schema`, `answer_text`,
+`selected_choice_ids`, `presentation`, `priority`, `pages`, `updated_at`,
+and `queued_behind_pending`. It never prints camy.ai's raw record.
 
 ### `approve` / `deny` / `answer --json` (without `--wait`)
 
@@ -492,6 +594,14 @@ resolved, `ok`, and `error` when that id failed.
 With `--wait`, the resumed turn streams as NDJSON, in the same event shapes
 any `camy chat` / `camy chat attach --json` stream uses. When the turn
 streams here, that stream is the whole output.
+
+When the resumed turn's reply is stored but its stream never reaches this
+process, `--wait` ends the output the way the stream would have: a `final`
+event with the reply's text, then a `done` event, and exits 0:
+
+```json
+{"type": "done", "chat_id": "...", "message_id": "...", "checkpoint_id": "a1b2c3d4..."}
+```
 
 If instead the CLI finds the chat idle and the checkpoint resolved somewhere
 else, it prints one extra object, on a single line so the whole output stays

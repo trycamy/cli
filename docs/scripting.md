@@ -63,6 +63,11 @@ Illustration: `version` and `commit` are stamped into your build, and
 `local_sandbox` and `wire_protocol` are described below. Those six keys are
 the whole object.
 
+Without `--json`, `camy version` and `camy --version` print one line on
+stdout, such as `camy v1.0.6 (darwin/arm64)`. The sentence about the local
+command sandbox that follows it goes to stderr, so `$(camy --version)`
+captures the version alone.
+
 `--jq` and `--template` switch a command to machine output on their own: any
 one of the three puts the whole invocation into machine mode. Machine mode
 also turns the [local bridge](local-bridge.md) off for that run and makes
@@ -80,7 +85,12 @@ Since 1.0.3 the shapes are uniform across commands:
   `{"partial": true, "results": [...], "rows": N, "error": "..."}` so what
   was already fetched is never thrown away, as `camy api --paginate` does
   (below). `camy inbox --all` instead exits with the error and prints no
-  rows.
+  rows. A list inside one of camy's own objects is `[]` or `{}` when
+  empty too, such as `entries` in `camy ledger --json` and `aliases` in
+  `camy alias --json`.
+- Since 1.0.6 `camy keys --json` gives every field in snake_case, so
+  `createdAt` and `lastUsedAt` arrive as `created_at` and `last_used_at`.
+  Update a script that read the old names.
 - A command that **shows one thing** (`camy jobs show ID --json`,
   `camy approvals show ID --json`, …) emits an **object**.
 - A verb that takes **several ids** (`camy approvals approve A B`,
@@ -104,7 +114,11 @@ Where a command wraps a server response that is not a listing, the JSON is
 the server's own shape passed through unchanged. [`camy status --json`](reference/camy_status.md)
 gives you `approvals`, `inbox_counts`, `jobs`, `workspace`, `credits`,
 `run_meter` and `activity`; what is inside them is defined by the API, not by
-the CLI, with `credits` the one exception below. `run_meter` holds context
+the CLI, except for three keys. `approvals` holds the same rows
+`camy approvals --json` prints (below), and counts what that command lists.
+`workspace` keeps only `status`, `state`, `instance_type`,
+`workspace_size` and `tier`; [`camy vm status --json`](reference/camy_vm_status.md)
+has the full record. `credits` is described below. `run_meter` holds context
 and credit usage for a turn in progress, and is `null` unless a turn is
 currently live on your last chat on this profile. `activity` holds the
 server's counts of what Camy did in the last day, and is `null` when they
@@ -124,21 +138,37 @@ Four shapes are worth knowing because they are camy's own, not the server's:
   `daily_reset_at`, `purchased` and `welcome_grant`. It is `null` when the
   balance can't be read; the rest of the object is still emitted.
 - [`camy doctor --json`](reference/camy_doctor.md) is an array of checks,
-  each `{"name", "ok", "info"}` plus `"warn"` and `"fix"` when they apply.
+  each `{"name", "ok", "info"}` plus `"warn"`, `"note"` and `"fix"` when
+  they apply.
   The exit code is driven only by `ok: false`; a row with `warn: true` never
   fails the command, so inspect `warn` per row if you care about it.
 - [`camy approvals --json`](reference/camy_approvals.md) is a deliberately
   narrowed list — `checkpoint_id`, `family`, `subject_id`, `chat_id`,
   `kind`, `tool_name`, `prompt`, `parameters`, `status`, `created_at`,
   `expires_at`, plus `merchant` and `amount` (`{"value","currency"}`) on a
-  computer checkout hold that carries them. Every row names its `family`. A row the checkpoint verbs
+  computer checkout hold that carries them, and `action_version` on a row
+  that has one. Every row names its `family`. A row the checkpoint verbs
   act on is `"family": "checkpoint"`, with `subject_id` equal to its
   `checkpoint_id`. Any other decision waiting on you carries its own
   `family` and `subject_id`, and its `checkpoint_id` is `""`, so filter on
   `family` before you hand ids to `approve`, `deny` or `answer`.
   [`camy approvals show ID --json`](reference/camy_approvals_show.md) emits
-  the full server row instead. The two shapes differ on purpose; do not
-  assume one parser handles both.
+  the same row plus what you need to answer the card, when the card has
+  them: `message_id`, `description`, `risk_level`, `choices`,
+  `input_schema`, `answer_text`, `selected_choice_ids`, `presentation`,
+  `priority`, `pages`, `updated_at` and `queued_behind_pending`. It is no
+  longer the server's whole row.
+
+`action_version` is the version of the pending action a row shows. When
+`camy approvals --json` (or `--jq` or `--template`) or
+`camy approvals show` has printed a row, a `camy approvals approve` or
+`deny` of that id on the same profile within a day acts only on that
+version. If the action was edited somewhere else in between, nothing runs
+and the card still waits: the verb prints camy.ai's own sentence, exits 4
+with no `checkpoint_id`, and hints `camy approvals show <id>`. Read the
+card again before you decide. The human `camy approvals` table and
+`camy status --json` don't count as showing a row: an id only they
+printed, or that nothing printed, is answered as the action stands.
 
 ### The error shape
 
@@ -152,13 +182,24 @@ camy status --json
 {"error":{"code":"auth","exit":3,"hint":"run camy auth login","message":"not signed in","request_id":""}}
 ```
 
+A flag camy can't parse is reported the same way when `--json` appears
+anywhere on the line, even after the bad flag:
+
+```bash
+camy status --bogus --json
+```
+
+```json
+{"error":{"code":"usage","exit":2,"hint":"camy status --help shows usage","message":"unknown flag: --bogus","request_id":""}}
+```
+
 These five keys are always present:
 
 | Key | Meaning |
 | --- | --- |
 | `code` | stable machine name: `usage`, `auth`, `checkpoint_pending`, `rate_limited`, `plan`, `unavailable`, `checkpoint_denied`, `runtime` |
 | `exit` | the process exit code, the same number your shell sees |
-| `message` | one sentence describing what happened. A server refusal camy has no name of its own for reads `HTTP <status>: <server sentence>` for most 4xx statuses (400, 422 and similar), the server's sentence alone for a 409, `not found: <sentence>` for a 404, and `blocked at the edge or forbidden: <sentence>` for a 403 that isn't a scope, key, plan or credit refusal. A 5xx reads `camy.ai had a problem`, or the app's own sentence when a 502, 503 or 504 carries one, followed by `(request <id>)` when the server tagged the request |
+| `message` | one sentence describing what happened. A server refusal camy has no name of its own for reads `HTTP <status>: <server sentence>` for most 4xx statuses (400, 422 and similar), the server's sentence alone for a 409, `not found: <sentence>` for a 404, and `blocked at the edge or forbidden: <sentence>` for a 403 camy can't read as a scope, key, plan, credit, account, region or app-only refusal (see [Troubleshooting](troubleshooting.md#common-situations)). A 5xx reads `camy.ai had a problem`, or the app's own sentence when a 502, 503 or 504 carries one, followed by `(request <id>)` when the server tagged the request |
 | `hint` | the single next thing to try, or `""` |
 | `request_id` | the server request id when a request happened, else `""` |
 
@@ -202,7 +243,7 @@ camy chat --json "summarize today" | jq -r 'select(.type=="final") | .text'
 
 | `type` | Fields | When |
 | --- | --- | --- |
-| `start` | `chat_id`, `turn_id`, `tier` | the turn begins; `tier` is what the server actually used |
+| `start` | `chat_id`, `turn_id`, `tier`, and `ai_notice` when camy.ai sends one | the turn begins; `tier` is the tier the turn asked for, and `done` says which one ran. `ai_notice` is `repeat` or `correction`, the two kinds of camy.ai's reminder that Camy is an AI, not a person |
 | `token` | `text` | a chunk of the streamed reply |
 | `tool_call` | `name`, `status`, `param`, and `duration_ms` and `result_count` when the server sends them | a tool the agent invoked; `param` is the server's parameter for the call as text (JSON-encoded when it isn't a string, `""` when there is none), with secrets redacted |
 | `collection` | the collection's own fields | a structured result block (emails, events, news, …) |
@@ -210,12 +251,12 @@ camy chat --json "summarize today" | jq -r 'select(.type=="final") | .text'
 | `checkpoint` | `id`, `kind`, `summary`, `tool_name`, `risk_level`, `prompt`, `description`, `expires_at`, and `choices` and `fields` when the card has them | the turn paused for an approval; see below |
 | `checkpoint_replayed` | `id`, `status` | a card of this chat that no longer waits on anyone; see below |
 | `action_confirmed` | `data`, the server's own frame | an approved action's outcome; see below |
-| `retry` | `dropped_chars`, `attempt`, `reason` | the model restarted its answer; `dropped_chars` counts the characters of `token` text already sent that are now void |
+| `retry` | `dropped_chars`, `attempt`, `reason` | the model restarted its answer; `dropped_chars` counts the characters of `token` text already sent that are now void. With `reason` `replace` (and no `attempt`), camy.ai corrected a reply it had already streamed, and the `token` events after it carry the corrected rest |
 | `resume_offer` | `chat_id`, `unsure`, and `held_until`, `stop_reason` and `ceiling_axis` when the server sends them | a turn in this chat was interrupted or held and can be resumed; `unsure` lists steps whose outcome is unknown. See below, and [An interrupted turn, offered back](chat.md#an-interrupted-turn-offered-back) |
 | `last_reply` | `chat_id`, `message_id`, `created_at`, `text` | `camy chat attach` found nothing running, so it read back the chat's latest reply. Absent when the newest message is still unanswered |
 | `warning` | `code` (`attachments_dropped`), `sent`, `accepted`, `message` | the server resolved fewer attachments than were sent, because an upload expired or was unknown; the agent never saw the rest. `sent` counts every attachment on the message, `--attach` files plus an automatic `stdin.txt`, and `accepted` is how many the server resolved |
 | `final` | `text` | the complete reply text |
-| `done` | `chat_id`, `turn_id` | the turn ended normally (plus `stopped: true` if you interrupted it) |
+| `done` | `chat_id`, `turn_id`; `stopped`, `tier_requested`, `tier_effective`, `tier_reason`, `ai_notice` and `care` when they apply | the turn ended normally. `stopped: true` means you interrupted it. The three `tier_` fields say which tier ran, when camy.ai reports it. `ai_notice` is as on `start`. `care` is the crisis lines camy.ai attached to the reply, passed through as sent |
 | `error` | `code`, `message` | the turn ended abnormally; see [Error codes in the stream](#error-codes-in-the-stream) |
 
 A `checkpoint` event carries what a script needs to decide without a second
@@ -285,6 +326,14 @@ streams the resumed turn's events and ends on the stream's own `done`. When
 the turn does not stream here but camy can read what became of the
 checkpoint, it ends instead on one closing line of its own.
 
+After a cloud action, the resumed turn's reply can be stored without its
+events ever reaching this process. `approve --wait`, `answer --wait` and
+`camy chat attach` then read the reply instead: once the turn has been
+quiet for 20 seconds they check every 5 seconds, and end on a `final`
+event with the reply and a `done` event, exit 0. When that `done` comes
+after the chat had gone idle, it carries `chat_id` and `message_id`, plus
+`checkpoint_id` under `--wait`.
+
 That closing line is NDJSON like every event before it: one compact object
 on one line, so a line-at-a-time reader handles both endings the same way.
 When the checkpoint completed:
@@ -338,6 +387,9 @@ The `error` event that ends a turn is its last event, except for
 | `rate_limited`, `too_many_connections`, `turn_concurrency_limit` | 5 | a rate refusal: your message, the account's cap on open connections, or every turn slot on the account staying busy |
 | `server_draining` | 7 | camy.ai was restarting; see below for when camy retries first |
 | `AUTH_UNAVAILABLE`, `unavailable` | 7 | camy.ai couldn't look your key up, or take the connection, just now; the key is fine |
+| `age_required` | 2 | the account needs your month and year of birth before it can continue |
+| `age_ineligible`, `child_detected` | 3 | the account has been closed because Camy is available only to adults |
+| `age_check_unavailable` | 7 | camy.ai couldn't read the account's age record just now; try again |
 | `stream_dropped`, `turn_lost`, `interrupted`, `send_failed`, `attach_failed` | 1 | camy's own: the stream dropped, a `--temp` chat's turn was lost, the turn was interrupted, or the message or attach couldn't be sent |
 | any other code | 1 | a refusal the server coded some other way, passed through as it was sent |
 
@@ -382,7 +434,13 @@ shows the human messages.
 ### Quiet mode
 
 `-q` / `--quiet` suppresses camy's non-data stderr lines — notes, spinners,
-progress. Errors still print, and stdout is untouched.
+progress — including the notes printed before a command starts, such as
+the one naming a non-default API address. Errors still print, and stdout
+is untouched. `-q` never hides the AI notices: the line before a one-shot
+`camy chat` reply saying that Camy is an AI, and the reminder or
+correction camy.ai sends during a chat. It never hides the crisis lines
+camy.ai attaches to a reply either. All go to stderr, so stdout stays the
+reply alone.
 
 ```bash
 camy jobs --json -q > jobs.json
@@ -394,11 +452,14 @@ See [`camy jobs`](reference/camy_jobs.md) and
 ### Commands with no machine output
 
 A few commands are text-only on purpose and accept `--json` without acting on
-it: [`camy config get KEY`](reference/camy_config_get.md) (use
-[`camy config list --json`](reference/camy_config_list.md) instead), the
-`camy help <topic>` pages, and the success line from
+it: the `camy help <topic>` pages and the success line from
 [`camy uninstall`](reference/camy_uninstall.md). Do not build a parser
-against those.
+against those. An unknown help topic is a usage error, exit 2, with
+`Unknown help topic` in the message.
+
+[`camy config get KEY --json`](reference/camy_config_get.md) prints an
+object, `{"key","value","origin"}`, since 1.0.6. Before that it printed the
+bare value, so a script that read it needs `--jq '.value'` now.
 
 ## `--jq` and `--template`
 
@@ -409,7 +470,7 @@ not need to pass `--json` alongside them.
 camy version --jq '.version'
 camy doctor --jq '[.[] | select(.ok == false)] | length'
 camy status --jq '.approvals | length'
-camy api GET /v1/jobs --jq '.[].id'
+camy api GET /v1/jobs --jq '.items[].id'
 ```
 
 `--jq EXPR` runs a jq expression over the JSON the command would have
@@ -425,6 +486,11 @@ camy doctor --template '{{range .}}{{.name}}: {{.ok}}{{"\n"}}{{end}}'
 [text/template](https://pkg.go.dev/text/template). The value is round-tripped
 through JSON first, so the template sees plain maps and slices under the JSON
 field names, and a newline is printed after the rendered output.
+
+When stdout is a terminal, `--jq` and `--template` output is cleaned of
+terminal control sequences the same way human output is, and `--json`
+writes control characters as `\u` escapes, which decode to the same value.
+Piped or redirected output is unchanged.
 
 Both apply to the single JSON value a command prints. They do not filter
 NDJSON stream events: a streaming command — `camy chat`, and
@@ -448,7 +514,7 @@ stored credentials and prints the JSON response. It is how you reach whatever
 the command tree has not wrapped.
 
 ```bash
-camy api GET /v1/jobs --jq '.[].id'
+camy api GET /v1/jobs --jq '.items[].id'
 camy api POST /v1/tasks --field title="renew passport"
 camy api GET /v1/inbox --paginate
 ```
@@ -471,6 +537,11 @@ parse as JSON:
 ```bash
 echo '{"title":"renew passport"}' | camy api POST /v1/tasks
 ```
+
+A file redirected to stdin is read whole. A pipe is read only if data, or
+its end, shows up within 2 seconds; otherwise the request goes out with no
+body. A script that starts `camy api` with an open stdin it never writes
+to, as some process launchers and `ssh` do, no longer hangs.
 
 **`--paginate`** walks `limit=100&offset=N` pages and prints one flat JSON
 array of every row. It stops on a short page, and it stops on an endpoint
@@ -495,6 +566,15 @@ mid-sweep page failure.
 A response body that is not JSON is printed as-is, after terminal escape
 sequences are stripped from it.
 
+camy reads an answer whole, up to 50MB. A single request over that prints
+nothing on stdout and exits 1 with `response from <path> exceeds the 50MB cap` and
+the hint `narrow the request (limit/cursor) — the CLI won't buffer more`.
+In a `--paginate` sweep, the rows already fetched are printed first as the
+`partial` object, then the error.
+An answer whose body stops arriving partway is a connection failure,
+`camy.ai unreachable: <error>`, exit 1, never a short or empty success.
+A write that ends that way may still have gone through.
+
 ## Non-interactive runs
 
 ### `--no-input`
@@ -505,7 +585,9 @@ different outcomes, by design:
 - **An approval fails closed with exit 4.** The turn stops, nothing runs, and
   the checkpoint id is on stderr — in the JSON error object as
   `checkpoint_id`. The pause is a durable handle: approve it later and
-  re-attach.
+  re-attach. When the card is a question, the hint names
+  `camy approvals answer <id> "…"` instead of `approve`, because a
+  question is answered, never approved.
 - **Every other prompt exits 2.** A destructive-action confirmation, or
   [`camy config edit`](reference/camy_config_edit.md), becomes a usage error
   naming what to pass instead.
@@ -513,6 +595,13 @@ different outcomes, by design:
 `--json` fails closed on approvals on its own, even in a real terminal. So
 does any run with no controlling terminal. Approval prompts read `/dev/tty`
 directly and never stdin, so `echo y | camy chat …` cannot answer one.
+
+A command on your own machine that would run without asking at a terminal
+also runs without asking under `--no-input` and in a run with no
+controlling terminal, such as from cron. Everything else the
+[local bridge](local-bridge.md) would ask about still fails closed. Under
+`--json`, `--jq` or `--template` the local bridge is off for the run, so
+nothing runs on your machine at all.
 
 [`camy auth login`](reference/camy_auth_login.md) refuses `--no-input`
 outright; use `CAMY_API_KEY` for headless authentication.
@@ -545,6 +634,9 @@ fi
 camy approvals approve <checkpoint-id> --wait --chat <chat-id>
 ```
 
+For a question, answer it instead:
+`camy approvals answer <checkpoint-id> "<answer>" --wait`.
+
 `--wait` responds, re-attaches, and streams the resumed turn to completion.
 Three things to budget for:
 
@@ -552,9 +644,10 @@ Three things to budget for:
   belongs to, else the last chat this profile used. With none of those it
   prints a note and exits 0 without streaming anything.
 - It waits about 120 seconds before it believes a quiet chat really is
-  idle, and up to 600 seconds in total when the run is paused on a card
-  being decided in another open camy session. Budget roughly ten minutes
-  worst case before you get a result or a "did not resume" error.
+  idle, and up to 600 seconds in total while the run stays paused, on a
+  cloud action that is still running or on a command being decided in
+  another open camy session. Budget roughly ten minutes worst case before
+  you get a result or a "did not resume" error.
 - It exits 1 when the checkpoint's own terminal status comes back failed,
   rejected, expired or cancelled, or when the result can't be tied to this
   approval. A "did not resume" error means this process
@@ -590,6 +683,15 @@ otherwise follows the ssh convention and mirrors a remote code from 0 to 254
 straight to your shell. The table, the machine `code` names, and which
 command raises which are all in [Exit codes](exit-codes.md).
 
+1.0.6 moved three cases onto the codes that table always named. Update a
+script that tested the old ones:
+
+- A malformed `--api-url` or `CAMY_API_URL` exits 2, not 1.
+- A feature that isn't on for your account yet, such as searching your
+  calls or your runs and jobs, exits 7, not 1.
+- A `camy device` command on a Mac that isn't linked to a Camy account
+  exits 7, not 2.
+
 Exit 5 is worth handling explicitly. camy already retries a rate-limited GET
 up to four times, honoring `Retry-After` — on the wrapped commands, not on
 `camy api`, which sends exactly one request. A 5 from a wrapped GET means
@@ -597,10 +699,15 @@ those retries were spent, or that the server asked for a wait longer than
 two minutes, which camy never sits through: the hint names that wait, as in
 `retry in about an hour`. Either way, back off rather than loop. A `camy chat`
 refused by the chat connection's own rate limits exits 5 as well.
+[`camy schedule create`](reference/camy_schedule_create.md) and
+[`camy schedule resume`](reference/camy_schedule_resume.md) at the limit on
+active schedules also exit 5, but print camy.ai's own reason with no retry
+hint: no wait lifts that limit.
 
-A write that fails with exit 1 on a server fault (HTTP 5xx), or on a
-connection that broke after the request went out, may still have gone
-through. Check before you retry it; see
+A write that fails with exit 1 on a server fault (HTTP 5xx), on a
+connection that broke after the request went out, or with an answer that
+was cut off partway, may still have gone through. Check before you retry
+it; see
 [A server refusal](troubleshooting.md#a-server-refusal-exit-1).
 
 ## Cron and CI
@@ -665,7 +772,7 @@ CAMY_API_KEY="$CI_CAMY_KEY" camy status --json
 ```
 
 It wins over the OS keychain and the fallback file, and camy never writes it
-anywhere. Three cautions:
+anywhere. Four cautions:
 
 - Keep it in your CI provider's secret store, never in a checked-in file or a
   shell rc. Mint a key scoped to what the job actually needs.
@@ -675,6 +782,10 @@ anywhere. Three cautions:
   matters; under `--json`, `--jq` or `--template` there is no note at all.
 - `camy auth logout --revoke` refuses to run when the active key came from
   `CAMY_API_KEY`, so a script cannot destroy a shared CI key by accident.
+- Since 1.0.6, a key from `CAMY_API_KEY` goes only to camy.ai's own API,
+  to this machine, or to an address `--api-url` or `CAMY_API_URL` names for
+  that run. When the `api_url` in `config.toml` or a profile points anywhere
+  else, the command exits 2 instead of sending the key there.
 
 `CAMY_PROFILE` selects which stored key, `api_url` and per-profile state a
 run uses, which is the clean way to keep a CI identity separate from your own:
@@ -737,8 +848,8 @@ it, or to `--attach` a file yourself.
 media type, such as `text/csv` rather than `text/csv; charset=utf-8`, the
 form camy.ai accepts for text files.
 
-**[`camy capture`](reference/camy_capture.md)** sends anything on stdin to
-Camy's memory intake. Pass `-` explicitly, or pipe with no argument at all:
+**[`camy capture`](reference/camy_capture.md)** saves the text on stdin to
+Camy. Pass `-` explicitly, or pipe with no argument at all:
 
 ```bash
 pbpaste | camy capture -
@@ -749,8 +860,13 @@ A capture holds up to 20,000 characters and its title up to 500. Anything
 longer, or more than 1 MiB on stdin, is a usage error (exit 2) before
 anything is sent, never a silent cut.
 
+On success it prints one line on stdout, `✓ Saved. Find it in For You.` or
+`✓ Saved. Camy keeps it but cannot open it yet.`, followed by the
+capture's id. `--json` prints camy.ai's answer instead.
+
 **`camy api`** reads a JSON request body from stdin for POST, PUT and PATCH
-when no `--field` was given, as described above.
+when no `--field` was given, waiting up to 2 seconds for a pipe, as
+described above.
 
 Because every prompt reads `/dev/tty` rather than stdin, piping data in never
 collides with a confirmation — and piping `y` in never answers one.
@@ -765,10 +881,10 @@ For human output the usual conventions apply, in this order:
 
 | Signal | Effect |
 | --- | --- |
-| `--color never` / `--color always` | wins over everything below |
+| `--color never` / `--color always` | wins over everything below, except that `TERM=dumb` always means no colour; with `always`, an empty or unset `TERM` still gets 16 colours, or more if `COLORTERM` says so |
 | config `color = never` or `off` | same as `--color never` |
 | `NO_COLOR` (any non-empty value), `CLICOLOR=0`, `TERM=dumb` | color off |
-| `FORCE_COLOR`, `CLICOLOR_FORCE` (any non-empty value) | color on even when piped |
+| `FORCE_COLOR`, `CLICOLOR_FORCE` (any non-empty value) | color on even when piped, and with an empty or unset `TERM`, as with `--color always` |
 | stdout is not a terminal | color off |
 
 `TERM=dumb` also puts camy in accessible mode — linear output, no spinners,

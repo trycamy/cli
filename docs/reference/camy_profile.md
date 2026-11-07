@@ -42,5 +42,6 @@ camy profile [flags]
 ### SEE ALSO
 
 * [camy](camy.md)	 - Camy in your terminal — the same agent, memory, and cloud computer you run at camy.ai
+* [camy profile list](camy_profile_list.md)	 - List the profiles on this computer
 * [camy profile use](camy_profile_use.md)	 - Switch the persisted default profile
 

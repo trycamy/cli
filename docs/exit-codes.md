@@ -2,6 +2,8 @@
 
 Every `camy` command ends with one of eleven exit codes. [`camy vm exec`](reference/camy_vm_exec.md)
 is the one exception: it also mirrors your remote command's own 0-254 code.
+A signal that stops a download mid-way exits 128 plus the signal number, the
+shell's own convention (see [131](#131--quit)).
 
 Scripts and CI should branch on the code, not on the wording of an error
 message. Message text is free to change between releases; the codes are
@@ -27,7 +29,7 @@ camy help exit-codes   # the same table, from the binary
 | 4 | checkpoint pending — approve out of band, then re-attach | `checkpoint_pending` |
 | 5 | rate limited | `rate_limited` |
 | 6 | plan — payment required or a paid-tier feature | `plan` |
-| 7 | unavailable — workspace asleep with `--no-wake`, a listing that won't wake it, or the workspace terminal unreachable | `unavailable` |
+| 7 | unavailable — workspace asleep with `--no-wake`, a listing that won't wake it, the workspace terminal unreachable, a feature not yet on for your account, or a Mac that isn't linked | `unavailable` |
 | 8 | checkpoint denied — a human said no | `checkpoint_denied` |
 | 131 | quit — you pressed Ctrl-\\ (SIGQUIT, 128+3) | — |
 | 255 | `camy vm exec` only: camy's own failure | `runtime` |
@@ -38,9 +40,12 @@ camy help exit-codes   # the same table, from the binary
 
 The command did what it was asked. Stderr carries only the command's own
 progress and chrome lines — a workspace waking up, `camy vm exec`'s
-mirrored-exit note, `--verbose` request ids — plus, at most once a day, an
-update note. An extra line names a non-default API origin when `--api-url`,
-`CAMY_API_URL`, or config sets one.
+mirrored-exit note, one line per request under `-v` — plus, at most once a
+day, an update note and, until you have read it, the Terms of Service and
+Privacy Policy reminder ([`camy legal notice`](reference/camy_legal_notice.md)).
+An extra line names a non-default API origin when `--api-url`,
+`CAMY_API_URL`, or config sets one, and a startup note says when an
+`editor`, `pager` or `default_profile` value in your config was ignored.
 
 ### 1 — runtime or API error
 
@@ -48,7 +53,14 @@ Something went wrong that isn't a usage mistake, an auth problem, or one of
 the other named conditions below: a failed HTTP call, a server-side error, a
 [`camy chat`](reference/camy_chat.md) turn hitting `error` mid-turn, or
 [`camy update`](reference/camy_update.md) refusing to overwrite a binary it
-doesn't own.
+doesn't own. Also exit 1: a [`camy api`](reference/camy_api.md) answer over
+50 MB, or one cut off mid-way (reported as a connection error that may have
+gone through); `Camy is not available in your country or region.` and
+`Publishing is not available in your country or region.`; a `HOME` that is
+not an absolute path; a `--profile` or `CAMY_PROFILE` name that is not a
+plain name (letters, digits, `.`, `_`, `-`); and a
+[`camy inbox reply`](reference/camy_inbox_reply.md) whose drafted reply
+comes back empty (`the draft came back empty`).
 
 Some runtime errors carry a [diagnosis card](#diagnosis-cards) instead of the
 plain two-line message — `camy update` explaining exactly why it wouldn't
@@ -73,7 +85,23 @@ What exits 2:
 - A value the CLI rejects before any request goes out — an unparseable
   `--until`, an `--at` that isn't in the future.
 - A short ID that turns out to match more than one row once the list comes
-  back.
+  back, or a short chat or schedule id that matches none (`no chat
+  matches …`, `no schedule matches …`).
+- A malformed `--api-url` or `CAMY_API_URL`, or an address the stored key
+  was not issued for (`your stored key was issued for <origin>`, or `this
+  key was never tied to a Camy, so it is only sent to https://api.camy.ai`).
+  Both exited 1 before 1.0.6.
+- `camy help <topic>` on a topic that doesn't exist (`Unknown help topic`;
+  it printed the root help and exited 0 before 1.0.6), a
+  [`camy vm exec`](reference/camy_vm_exec.md) command over 4,096 characters,
+  and a [`camy schedule create`](reference/camy_schedule_create.md) time it
+  can't read whole, such as `9:00pm`.
+- An account that still owes its month and year of birth: camy.ai refuses
+  every command until it is answered in the Camy app or at camy.ai.
+- A [`camy chat`](reference/camy_chat.md) `--attach` that is a folder or a
+  file over 50 MB, checked before any chat is created, and a
+  [`camy inbox reply`](reference/camy_inbox_reply.md) `--send` whose reply
+  is empty (an editor you emptied, or a blank `--body`); nothing is queued.
 - A destructive-operation confirmation prompt running headless
   (`--no-input` or no controlling TTY) without `--force`.
 
@@ -88,6 +116,16 @@ they exit 2 until you pass that word as `--confirm <word>`.
 The stored API key is missing, invalid, or lacks the scope the command
 needs. See [Authentication](authentication.md).
 
+Also exit 3, from 1.0.6: an action camy.ai takes only from your signed-in
+Camy app or browser, never with an API key — `… from your signed-in Camy app
+or browser, not with an API key`, with the hint `do it in the Camy app or at
+camy.ai — the terminal always signs in with an API key`. That covers
+[`camy vm resize`](reference/camy_vm_resize.md) and
+[`camy vm provision`](reference/camy_vm_provision.md), and `camy sweep set
+auto`; these exited 1 (or 6) before. An account scheduled for deletion
+(the message names the date and how to cancel) and an account closed for age
+also exit 3.
+
 ### 4 — checkpoint pending
 
 A chat turn hit a checkpoint — a pause for a human decision — and the
@@ -101,6 +139,20 @@ The message carries the checkpoint's ID, so you can act on it separately:
 checkpoint <id> requires approval:
   camy approvals approve <id>
 ```
+
+A checkpoint that is a question rather than an approval reads
+`checkpoint <id> is a question — it's answered, never approved:` with
+`camy approvals answer <id> "…"` as the hint; the `--json` error carries the
+same message and hint.
+
+Exit 4 has a second cause from 1.0.6: answering a request that was edited
+somewhere else since you were shown it. [`camy approvals approve`](reference/camy_approvals_approve.md),
+`deny`, the card inside a chat, the `/approvals` browser and
+[`camy feed act`](reference/camy_feed_act.md) all run nothing in that case,
+print camy.ai's own sentence with the hint `camy approvals show <id>`, and
+send no `checkpoint_id`. Look at the request again, then answer it again.
+`camy feed act <id> approve` also exits 4 when camy.ai holds the approval for
+another check instead of carrying it out.
 
 Resolve it from another session with
 [`camy approvals`](reference/camy_approvals.md) — `approve`, `deny`, or
@@ -128,6 +180,11 @@ request:
 
 So a 5 on the last two means the retry is yours to make.
 
+[`camy schedule create`](reference/camy_schedule_create.md) and
+[`camy schedule resume`](reference/camy_schedule_resume.md) also exit 5 at
+the limit on active schedules; they print camy.ai's own sentence, with no
+retry hint, because waiting will not help.
+
 ### 6 — plan
 
 The API returned HTTP 402, or a 403 that means "available on a paid tier,"
@@ -144,8 +201,9 @@ line — and no `--json` error object — follows it.
 camy vm exec --no-wake -- pytest -q
 ```
 
-The thing the command needs isn't reachable right now. Three cases produce
-this today:
+The thing the command needs isn't reachable right now, or isn't there yet.
+These cases produce it; the last two moved here in 1.0.6, so a script that
+tested for 1 or 2 there needs updating:
 
 - `camy vm exec --no-wake` against a stopped or sleeping workspace: it
   refuses to spend a multi-minute wake-up silently. See
@@ -158,6 +216,14 @@ this today:
   socket won't open or won't complete its handshake. Check
   [`camy vm status`](reference/camy_vm_status.md), then
   [`camy vm start`](reference/camy_vm_start.md).
+- A feature that isn't on for your account yet: `camy calls search`,
+  `camy runs search`, `camy jobs search`, and linking a computer with
+  [`camy device enroll`](reference/camy_device_enroll.md)
+  (`Linking a computer isn't on for your account yet.`). These exited 1
+  before 1.0.6.
+- A device command on a Mac that isn't linked (`This Mac isn't linked to a
+  Camy account.`), and an age record camy.ai can't read. The first exited 2
+  before 1.0.6. See [Camy on your Mac](device.md).
 
 ### 8 — checkpoint denied
 
@@ -190,6 +256,12 @@ dumping every goroutine to stderr and exiting 2; camy exits 131 instead,
 the shell's 128+signal convention, and prints no dump.
 Set `CAMY_DEBUG_DUMP=1` to keep the dump when you are reporting a hang.
 There is no JSON error object for 131: the process was told to quit.
+
+The same 128+signal convention applies to a Ctrl-C (130), `SIGTERM` or
+`SIGHUP` that stops [`camy download`](reference/camy_download.md),
+[`camy device enroll`](reference/camy_device_enroll.md) or the linking step
+of [`camy auth login`](reference/camy_auth_login.md) mid-way: the partly
+written file is removed first.
 
 ### 255 — camy vm exec's own failure
 
@@ -245,7 +317,7 @@ camy status --json
 | `message` | yes | the error text |
 | `hint` | yes | second-line guidance; empty string when there is none |
 | `request_id` | yes | the server request ID, or `""` when there isn't one |
-| `checkpoint_id` | only on exit 4 | the pending checkpoint's ID |
+| `checkpoint_id` | only on exit 4 for a pending checkpoint | the pending checkpoint's ID; absent when the request changed since it was shown |
 | `title`, `details`, `fixes` | only on a diagnosis-card error | structured form of the [card](#diagnosis-cards) |
 
 `request_id` is often empty: it's populated for errors that came back from a

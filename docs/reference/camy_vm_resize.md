@@ -1,11 +1,13 @@
 ## camy vm resize
 
-Resize the workspace in place — data survives; downgrades are refused server-side
+Refused here: resize your workspace in the Camy app or at camy.ai
 
 ### Synopsis
 
-Resizes the workspace in place (stop → resize → start); the disk and its data
-survive. The GPU add-on stays as it is unless --gpu or --no-gpu says otherwise.
+camy.ai resizes a workspace only from your signed-in Camy app or browser, never
+with an API key, and the terminal signs in with an API key. So this stops
+with exit 3 and camy.ai's reason, before it reads anything or asks
+to confirm. Resize it in the Camy app or at camy.ai.
 
 ```
 camy vm resize SIZE [flags]

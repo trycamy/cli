@@ -215,7 +215,12 @@ camy inbox reply em_7f31 --body "sounds good" --send --at 2h
 | `--no-wait` | accepted; the send path is identical either way |
 
 - `--edit` needs a real terminal; in a headless session use `--body`
-  instead.
+  instead. While the editor is open, Ctrl-C goes to the editor, not to
+  camy: camy waits for the editor to close, as git does.
+- With `--send`, an empty reply, such as an editor you emptied or a
+  `--body` of only spaces, is refused with
+  `--body TEXT or --edit is required` (exit 2), and nothing is queued or
+  scheduled.
 - The undo window is 30 seconds by default. The queued line prints the
   clock time it closes, with the date when that isn't today
   (`✓ queued — sending at 10:04:30 · changed your mind? camy inbox undo …`),
@@ -287,7 +292,7 @@ counting on being able to stop a scheduled send.
 |---|---|
 | `--subject string` | required |
 | `--body string` | email body (skips `$EDITOR`) |
-| `--edit` | open the body in `$EDITOR` first |
+| `--edit` | open the body in `$EDITOR` first (Ctrl-C there goes to the editor) |
 | `--cc string`, `--bcc string` | comma-separated addresses |
 | `--provider string` | `gmail` or `outlook`; defaults to your first connected account |
 | `--at string` | schedule instead of sending now: a duration or RFC3339 timestamp |
@@ -346,9 +351,13 @@ See [camy inbox snooze](reference/camy_inbox_snooze.md) and
 
 Every email id in this section accepts the typed short id `camy inbox`
 prints (`em_7f31`), a bare prefix of at least 4 characters of the full id,
-or the full id. A short id is looked up in your whole inbox, then your
-needs-you view, then your unread mail (the newest 200 of each), so a
-message that sits far down a large inbox still resolves. `restore` and
+or the full id. A short id is looked up in every view the list prints
+from: your whole inbox, your needs-you view, your unread mail and each
+`--tab` (the newest 200 of each), then further back, among the newest
+1,000 messages in your whole inbox. So an id any `camy inbox` view
+printed resolves, even for a message that sits far down a large inbox.
+When `inbox show` can't find a message, it names the id as you typed it
+(`no email em_198f`). `restore` and
 `unsnooze` look where that mail lives instead: your archived mail and
 trash, or your snoozed mail (the newest 1,000 of each).
 
@@ -376,7 +385,10 @@ camy sweep
 Prints the dial: all four modes, each with a line on what it does, the
 current one marked `← now` (`← now, paused` when it's paused), then the
 commands to review what it filed, restore it, and step the dial up or
-down.
+down. When the step up would start the sweep filing on its own (a step
+to `auto` while the dial isn't paused), that row names where to make it
+instead of a command (`auto  in the Camy app or at camy.ai`): see
+[Modes](#modes).
 
 ### Modes
 
@@ -401,8 +413,22 @@ On success `sweep set` prints
 doesn't save the change, it fails with the reason (exit 1) instead of
 confirming a dial that didn't move.
 
+Turning the dial up to `auto`, so the sweep starts filing on its own, is
+the one move the terminal can't make: camy.ai takes it only from the Camy
+app or camy.ai. `camy sweep set auto` then fails with camy.ai's reason
+(exit 3) and a hint naming where to do it. Stepping down, and every other
+move, works from the terminal.
+
 `--dry-run` shows the current mode against the one you're about to set,
-without writing anything.
+without writing anything. For a step up to `auto` it says the terminal
+can't make it, with a `!` instead of a ✓:
+
+```text
+! dry run — dial is suggest; the terminal can't turn it up to auto — do it in the Camy app or at camy.ai
+```
+
+Under `--json` the dry run's object carries `needs_signed_in_app`, `true`
+for that move.
 
 See [camy sweep](reference/camy_sweep.md) and
 [camy sweep set](reference/camy_sweep_set.md).
@@ -456,7 +482,9 @@ camy feed dismiss 3f2a
 ```
 
 Each line shows a short id (`fd_3f2a`), the kind of card, the title, and
-how long ago it arrived. Approval, needs-input, escalation and alert cards
+how long ago it arrived. The title prints as plain text on one line,
+without markdown marks; `--json` keeps it as camy.ai sent it. Approval,
+needs-input, escalation and alert cards
 that are still new or pending are marked `!` and counted in the line above
 the list (`2 cards · 1 need a decision`). Other cards are listed without
 the mark.
@@ -505,7 +533,21 @@ it with `--force` once you trust the action id.
 
 If the server doesn't carry the press out, for instance because it came
 too late or the action needs a confirmation in the Camy app first, `act`
-fails with the server's reason (exit 1) instead of printing ✓.
+fails with the server's reason (exit 1) instead of printing ✓. The same
+goes for an approve that failed, expired or was stopped before it ran
+(camy.ai's reason, or `camy.ai couldn't approve that card`). An approve
+camy.ai holds for another check is no ✓ either: it exits 4, with
+`camy feed show` and the card's id as the hint.
+
+An approve, reject or edit answers the version of the card you were
+shown. When `camy feed show`, or a `--json` listing, printed the card in
+the last 24 hours, camy sends back which version of its request that was,
+and camy.ai runs only that version. If the request was edited somewhere
+else since, nothing runs and the card keeps waiting: camy prints camy.ai's
+reason and exits 4, with `camy feed show` and the card's id as the hint,
+so you can read it again before you act. A card nothing printed is
+answered as it stands. camy keeps only the ids and versions, per profile,
+never what the cards say.
 
 ```bash
 camy feed dismiss 3f2a

@@ -9,7 +9,7 @@ and out of Camy without a chat turn.
 | [Schedules](#schedules) | `camy schedule` | one instruction on a timer |
 | [Runs](#runs) | `camy runs search` | what your agents did, and what they said |
 | [Tasks](#tasks) | `camy tasks` | quick to-dos; nothing fires on its own |
-| [Capture](#capture) | `camy capture` | one line into memory intake |
+| [Capture](#capture) | `camy capture` | save text to Camy without a chat |
 | [Integrations](#integrations) | `camy integrations` | connected accounts |
 | [Webhooks](#webhooks) | `camy webhooks` | endpoints and their deliveries |
 
@@ -74,7 +74,8 @@ characters.
 | `-L, --limit int` | how many to show, 1 to 100 (default 25) |
 | `--offset int` | skip that many matches (default 0); a negative value is a usage error before any network call |
 
-If search isn't on for your account yet, the command says so and exits 1.
+If search isn't on for your account yet, the command says so and exits 7
+(unavailable).
 
 ### One job in detail
 
@@ -148,8 +149,8 @@ A paused schedule stays in the list, under the same id, with `—` for next
 fire, since it won't fire until you resume it; it sorts after everything
 that will. The schedule behind a suspended job rests the same way, marked
 `○` with `—` for next fire. A scheduled task on a cron outside the three
-`WHEN` shapes below (weekdays only, say) shows the cron itself and `—` for
-next fire.
+`WHEN` shapes below (weekdays only, or a range or list of hours such as
+`0 9-17 * * *`, say) shows the cron itself and `—` for next fire.
 
 The reminders-and-timers half of the list covers the first 100 that are
 still pending (active, paused, or snoozed), soonest fire first. When all
@@ -172,7 +173,7 @@ short report to the channels in `--channels`.
 | You write | Means | Cron |
 | --- | --- | --- |
 | `"07:00"` | daily at that time; the first fire is tomorrow if it's already past today | `0 7 * * *` |
-| `"hourly"` | the next hour boundary, then every hour after | `0 * * * *` |
+| `"hourly"` | the next top of the hour on the timezone's clock, then every hour after | `0 * * * *` |
 | `"mon 07:00"` | weekly, that weekday and time (`sun`…`sat`, first 3 letters, case-insensitive) | `0 7 * * 1` |
 
 ```bash
@@ -193,6 +194,13 @@ expressions aren't schedulable yet.
 
 Anything else unparseable gets a generic "couldn't parse" error. Both list
 the three supported forms as the hint.
+
+The time in `WHEN` is 24-hour `H:MM` or `HH:MM` and nothing more: write
+`21:00`, not `9:00pm`. A time with anything else in it, such as `9:00pm`,
+`7am`, or `9:30:45`, gets the "couldn't parse" error instead of a schedule
+at another hour. If the time you typed doesn't exist on the first day
+because the clocks go forward that night (`02:30`, say), the schedule
+still keeps the time you typed for every day or week after.
 
 | Flag | Effect |
 | --- | --- |
@@ -217,6 +225,11 @@ removes it.
 A schedule made with `schedule create` before 1.0.4 never ran its
 instruction. If `camy schedule` still lists one, delete it and create it
 again.
+
+Before 1.0.6, `schedule create` ignored anything after the minutes, so
+`"9:00pm"` made a schedule for 09:00 with no error. If `camy schedule`
+lists one whose next fire is at the wrong hour, delete it and create it
+again with the 24-hour time (`"21:00"`).
 
 `--dry-run` prints a one-line summary in human mode, the exact request
 body under `--json`:
@@ -244,7 +257,12 @@ camy schedule delete sc_9f8e
 
 `ID` is the short id the list prints (`sc_9f8e`), a prefix of at least 4
 characters, or a full id, resolved against every kind of schedule
-together. `pause` works on everything except the reminders and timers an
+together. An id that matches no schedule fails with
+`no schedule matches sc_9f8x` and the hint `camy schedule lists them`
+(exit 2), and nothing is paused, resumed, or deleted. If one of the lists
+behind `camy schedule` couldn't be read, camy can't rule the id out and
+passes it on without the `sc_` prefix.
+`pause` works on everything except the reminders and timers an
 agent set; those can only be deleted, and trying gives a usage error
 pointing at `delete` instead.
 
@@ -260,6 +278,14 @@ the agent in a chat to resume it, or delete it. When most of a scheduled
 task's recent runs failed, camy.ai
 may decline to resume it: the command exits 1 with the reason, and
 `--force` resumes it anyway.
+
+Only `camy schedule resume` on a paused schedule that isn't a scheduled
+task, a reminder, or a timer can be refused because you already have as
+many active schedules as your account allows. It prints camy.ai's reason
+(cancel one before adding another) and exits 5, with no retry hint, since
+waiting won't help. Remove one you no longer need with
+`camy schedule delete` first. `schedule create` and resuming a scheduled
+task aren't limited this way today.
 
 `delete` works on every kind: it cancels an agent's reminder or timer, or
 deletes anything else, whichever the id resolves to. It takes several ids
@@ -341,8 +367,9 @@ by either flag or paged by `--offset`.
 value for jobs, so a job's runs show up only when `--source` is left off.
 
 If search isn't on for your account yet, `camy runs search` and
-`camy jobs search` both say so and exit 1. Past 30 searches a minute you
-get the rate-limit exit (5).
+`camy jobs search` both say so and exit 7 (unavailable). Before 1.0.6 they
+exited 1, so a script that checks for 1 there needs updating. Past 30
+searches a minute you get the rate-limit exit (5).
 
 See [camy runs](reference/camy_runs.md) and
 [camy runs search](reference/camy_runs_search.md) for the full flag list.
@@ -367,9 +394,20 @@ camy tasks add "call the accountant about Q3"
 ```
 
 `TITLE...` is one or more words, joined with spaces. `--due` takes an ISO
-8601 date, sent as-is with no local format checking. `--priority` must be
-exactly `low`, `medium`, or `high` — anything else is a usage error before
-any network call.
+8601 date, or a date and time. A date alone (`2026-11-01`) means midnight
+at the start of that day in this computer's time zone, and a time with no
+offset (`2026-11-01T17:00`, or with a space in place of the `T`) is read
+as this computer's local time, so the task is due when you meant. A value
+with its own offset (`2026-11-01T17:00:00-06:00`, or one ending in `Z`) is
+sent as typed, and so is anything camy can't read, with no local format
+checking. `--priority` must be exactly `low`, `medium`, or `high` —
+anything else is a usage error before any network call.
+
+Before 1.0.6, a `--due` with no offset was saved as UTC, so the task came
+due at the wrong time anywhere outside UTC: early west of UTC, late east
+of it. A task added that way keeps
+the due time it was saved with; remove it with `camy tasks rm` and add it
+again.
 
 ```bash
 camy tasks done tk_2b28
@@ -394,14 +432,24 @@ See [camy tasks](reference/camy_tasks.md), [camy tasks add](reference/camy_tasks
 camy capture [TEXT | -] [--title TITLE]
 ```
 
-Sends text into Camy's memory intake — a place to drop a note, a quote, or
-a stray thought without opening a chat.
+Saves text to Camy — a place to drop a note, a quote, or a stray thought
+without opening a chat.
 
 ```bash
 camy capture "call the accountant about Q3"
 camy capture "meeting notes" --title "Q3 sync"
 pbpaste | camy capture -
 ```
+
+It prints where the capture went, then the saved capture's id:
+
+```text
+✓ Saved. Find it in For You. · 3f2a91c0-7b1d-4e8a-9c55-2d7e0a6b1f04
+```
+
+When Camy can't open the capture for you yet, the line reads
+`Saved. Camy keeps it but cannot open it yet.` instead, with the id after
+it the same way. Either way the capture is saved.
 
 Text comes from three places, in this order: a literal `-` reads stdin; no
 arguments at all, with something piped in (stdin isn't a terminal), also
@@ -479,6 +527,10 @@ stored doesn't end the wait early. When your sign-in lands:
 ```text
 ✓ gmail connected
 ```
+
+camy opens only a secure sign-in link. If the link camy.ai sends isn't
+one, the command stops before printing or opening it, exits 1, and
+suggests trying again, then `camy doctor` if it keeps happening.
 
 If you sign in again to an account that was working but leave out some of
 what Camy asks for, the wait stops with
@@ -619,7 +671,9 @@ cancel job jb_3f2a? [y/N]
 ```
 
 Given several ids, they ask once for the whole set (`cancel 3 jobs? [y/N]`).
-Anything other than `y`/`yes` cancels the operation. The prompt reads
+Anything other than `y`/`yes` cancels the operation. Keys typed before the
+prompt appears are thrown away, so only an answer typed once you can see
+the question counts. The prompt reads
 `/dev/tty` directly, not stdin, so it never conflicts with a command that
 also takes piped input elsewhere (`camy capture -`, for instance, stays
 purely a stdin reader).

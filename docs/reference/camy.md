@@ -43,11 +43,12 @@ camy [flags]
 * [camy auth](camy_auth.md)	 - sign in, inspect, sign out
 * [camy calls](camy_calls.md)	 - your call history, searchable by what was said
 * [camy canvas](camy_canvas.md)	 - what the agent built — files, sites, snapshots
-* [camy capture](camy_capture.md)	 - Anything on stdin (or argv) lands in Camy's memory intake
+* [camy capture](camy_capture.md)	 - Save text from stdin or arguments to Camy
 * [camy chat](camy_chat.md)	 - talk to your agent — streams the reply and every tool call
 * [camy chats](camy_chats.md)	 - Sessions: list, show, export
 * [camy config](camy_config.md)	 - Settings — get, set, unset, list, edit
 * [camy connectors](camy_connectors.md)	 - Your connections — accounts, servers, and what each may do
+* [camy crisis](camy_crisis.md)	 - Crisis lines
 * [camy device](camy_device.md)	 - Link this computer to your Camy account and run as a resident agent
 * [camy docs](camy_docs.md)	 - the reference, in your terminal
 * [camy doctor](camy_doctor.md)	 - diagnostics with fixes — exit 1 if anything fails
@@ -58,6 +59,7 @@ camy [flags]
 * [camy jobs](camy_jobs.md)	 - long-running work — list, show, cancel
 * [camy keys](camy_keys.md)	 - list, rotate, revoke API keys
 * [camy ledger](camy_ledger.md)	 - This device's own record — every call it accepted or refused
+* [camy legal](camy_legal.md)	 - Camy's Terms of Service and Privacy Policy
 * [camy local](camy_local.md)	 - what Camy may touch on THIS machine
 * [camy mode](camy_mode.md)	 - how deep it thinks — agent · quick
 * [camy plan](camy_plan.md)	 - Your plan and credits — what's left today, this month, and where to change it

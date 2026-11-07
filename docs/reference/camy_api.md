@@ -9,7 +9,7 @@ camy api METHOD PATH [flags]
 ### Examples
 
 ```
-  camy api GET /v1/jobs --jq '.[].id'
+  camy api GET /v1/jobs --jq '.items[].id'
   camy api POST /v1/tasks --field title="renew passport"
   camy api GET /v1/inbox --paginate
 ```
