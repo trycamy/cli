@@ -23,20 +23,24 @@
 #                        the channel currently publishes
 #   CAMY_INSTALL_DIR     where the binary goes (default ~/.local/bin)
 #   CAMY_NO_MODIFY_PATH  set to 1 to leave shell rc files and symlinks alone
-#   CAMY_DL_BASE         alternate download base URL, for local or air-gapped
-#                        mirrors (default https://dl.camy.sh/stable)
+#   CAMY_DL_BASE         alternate download base URL, for mirrors (default
+#                        https://dl.camy.sh/stable). Must be https; plain http
+#                        is accepted only for a loopback address (127.0.0.1,
+#                        localhost, [::1]) so a local mirror can be tested
 #   CAMY_REQUIRE_SIGNATURE
-#                        set to 1 to refuse to install unless minisign is
-#                        available to verify the release signature
+#                        the release signature check is MANDATORY by default.
+#                        Set to 0 to install without it (discouraged: the
+#                        install is then protected by TLS and a checksum only)
 #
 # What this script verifies: the release's own signed manifest,
-# SHA256SUMS-<version>, is fetched over TLS and, when minisign is installed,
-# verified against the camy release public key built into this script; the
-# tarball's SHA-256 is then checked against that manifest. Without minisign
-# the install is TLS plus checksum, and the summary says so. The channel's
-# VERSION is refused when it names something older than this installer
-# knows, so a rolled-back channel cannot steer a fresh install onto an old
-# release. See docs/verifying-releases.md in github.com/trycamy/cli.
+# SHA256SUMS-<version>, is fetched over TLS and verified with minisign against
+# the camy release public key built into this script; the tarball's SHA-256 is
+# then checked against that manifest. minisign must be installed: without it
+# (and without the explicit CAMY_REQUIRE_SIGNATURE=0) the install is refused
+# before anything is downloaded. The channel's VERSION is refused when it
+# names something older than this installer knows, so a rolled-back channel
+# cannot steer a fresh install onto an old release. See
+# docs/verifying-releases.md in github.com/trycamy/cli.
 set -eu
 
 # The minisign public key every camy release manifest is signed with. It is
@@ -48,7 +52,7 @@ MINISIGN_PUB="RWT7bpmBcMfiVQvo6BbIeVDh7f9B8WbapvOEBzs7TxhSkLsjlySfxXG6"
 # floor is what refuses it. It is the PREVIOUS release, not the one shipping:
 # the publish job uploads this script a moment before it flips VERSION, and
 # the floor must not refuse the version still current in that moment.
-MIN_VERSION="1.0.4"
+MIN_VERSION="1.0.5"
 
 # ── terminal colors ────────────────────────────────────────────────────────
 # Color is only ever put on individual words (the "camy" wordmark, a
@@ -82,28 +86,86 @@ version_below() {
     exit 1 }'
 }
 
-# verify_signature MANIFEST URL-OF-MINISIG: with minisign installed, the
-# manifest must carry a valid signature from the camy release key, or nothing
-# is installed. Without minisign the install is checksum-only, which the
-# summary row says plainly; CAMY_REQUIRE_SIGNATURE=1 turns that into a
-# refusal. Sets SIGNED=1 when the signature verified.
+# require_minisign: the signature check is mandatory. Without minisign (and
+# without the explicit CAMY_REQUIRE_SIGNATURE=0 opt-out) nothing is
+# downloaded. Fetching a pinned minisign build is deliberately not done: a
+# verifier pulled over the network is only as trustworthy as the per-platform
+# SHA-256s embedded in this script, and those need a reviewed pin (see
+# RELEASING.md) rather than a guess; refusing is the safe default.
+# Sets SIG_REQUIRED=1, or "" under the explicit opt-out.
+require_minisign() {
+  SIG_REQUIRED=1
+  if [ "${CAMY_REQUIRE_SIGNATURE:-}" = "0" ]; then
+    SIG_REQUIRED=""
+    return 0
+  fi
+  command -v minisign >/dev/null 2>&1 || \
+    fail "minisign isn't installed, and camy won't install a release it can't verify. Install minisign (macOS: brew install minisign · Debian/Ubuntu: apt install minisign · other: https://jedisct1.github.io/minisign/) and run this again. To skip the signature check anyway, set CAMY_REQUIRE_SIGNATURE=0 (discouraged: the install is then protected by TLS and a checksum only)."
+}
+
+# check_dl_base: CAMY_DL_BASE must be https. The one exception is a loopback
+# address, which never crosses a network (a local mirror, the installer's own
+# test suite). The authority is parsed rather than prefix-matched so that
+# "http://127.0.0.1@evil.example/" or "http://localhost.evil.example/" cannot
+# pass for a loopback host.
+check_dl_base() {
+  base_msg="CAMY_DL_BASE must be an https:// address (plain http is accepted only for 127.0.0.1, localhost or [::1]) — refusing to download over an unencrypted connection"
+  case "$1" in
+    https://*) return 0 ;;
+    http://*) ;;
+    *) fail "$base_msg" ;;
+  esac
+  rest=${1#http://}
+  auth=${rest%%/*}
+  case "$auth" in
+    *@*|*\\*|*\?*|*\#*) fail "$base_msg" ;;
+  esac
+  host=$auth; port=""
+  case "$auth" in
+    \[*\]:*) host=${auth%%\]:*}"]"; port=${auth##*\]:} ;;
+    \[*\]) host=$auth ;;
+    *:*) host=${auth%%:*}; port=${auth#*:} ;;
+  esac
+  case "$port" in *[!0-9]*) fail "$base_msg" ;; esac
+  case "$host" in
+    127.0.0.1|localhost|"[::1]") return 0 ;;
+  esac
+  fail "$base_msg"
+}
+
+# verify_signature MANIFEST URL-OF-MINISIG: when the signature is required
+# (the default) the manifest must carry a valid signature from the camy
+# release key, or nothing is installed. Sets SIGNED=1 when it verified; with
+# the explicit CAMY_REQUIRE_SIGNATURE=0 opt-out SIGNED stays empty and the
+# summary says so.
 verify_signature() {
   SIGNED=""
-  if command -v minisign >/dev/null 2>&1; then
-    # shellcheck disable=SC2086
-    curl -fsSL --retry 2 --retry-delay 1 $proto_pin -o "$1.minisig" "$2" || \
-      fail "the release signature is missing — refusing to install unverified binaries"
-    minisign -Vq -m "$1" -x "$1.minisig" -P "$MINISIGN_PUB" >/dev/null 2>&1 || \
-      fail "the release manifest is not signed by camy's release key — not installing (a tampered mirror? report it at camy.ai/support)"
-    SIGNED=1
-  elif [ "${CAMY_REQUIRE_SIGNATURE:-}" = "1" ]; then
-    fail "CAMY_REQUIRE_SIGNATURE=1 but minisign isn't installed — install minisign and retry"
-  fi
+  [ -n "$SIG_REQUIRED" ] || return 0
+  # shellcheck disable=SC2086
+  curl -fsSL --retry 2 --retry-delay 1 $proto_pin -o "$1.minisig" "$2" || \
+    fail "the release signature is missing — refusing to install unverified binaries"
+  minisign -Vq -m "$1" -x "$1.minisig" -P "$MINISIGN_PUB" >/dev/null 2>&1 || \
+    fail "the release manifest is not signed by camy's release key — not installing (a tampered mirror? report it at camy.ai/support)"
+  SIGNED=1
 }
 
 main() {
   DL_BASE="${CAMY_DL_BASE:-https://dl.camy.sh/stable}"
+  check_dl_base "$DL_BASE"
   INSTALL_DIR="${CAMY_INSTALL_DIR:-$HOME/.local/bin}"
+  # CLI-UPDATE#3: the directory is written into your shell's rc file inside
+  # double quotes, where a quote, $, backtick or backslash in its name would
+  # run as code in every later shell — and a relative one would mean a
+  # different place in every directory you open a terminal in.
+  case "$INSTALL_DIR" in
+    /*) ;;
+    *) fail "CAMY_INSTALL_DIR must be an absolute path" ;;
+  esac
+  case "$INSTALL_DIR" in
+    *[\"\$\`\\]*|*"
+"*) fail "CAMY_INSTALL_DIR can't contain a quote, \$, a backtick, a backslash or a line break" ;;
+  esac
+  require_minisign
   # the channel's VERSION file names the current release. CAMY_VERSION is the
   # ONE escape hatch (air-gapped mirrors, pinning a known-good build); there is
   # no other fallback, because a version we made up is worse than no install.
@@ -145,9 +207,10 @@ main() {
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/camy-install.XXXXXX")
   trap 'rm -rf "$tmp"' EXIT INT TERM
 
-  # https is pinned unless the user explicitly pointed CAMY_DL_BASE at http
-  # (a deliberate act — local mirrors, air-gapped testing)
-  proto_pin="--proto =https --proto-default https"
+  # https is pinned, redirects included. check_dl_base already refused every
+  # http base but a loopback one, which cannot be intercepted and may not
+  # speak TLS (a local mirror, the installer's own test suite).
+  proto_pin="--proto =https --proto-default https --proto-redir =https"
   case "$DL_BASE" in http://*) proto_pin="" ;; esac
 
   # on a terminal, show curl's own progress bar; otherwise stay silent but
@@ -190,7 +253,7 @@ main() {
     row "$OKM" "$tarball" "${size_mb} MB · signature and checksum verified"
   else
     row "$OKM" "$tarball" "${size_mb} MB · checksum verified"
-    row "$DIMI" ""        "minisign not installed — signature not checked · brew install minisign"
+    row "$DIMI" ""        "signature NOT checked — you set CAMY_REQUIRE_SIGNATURE=0"
   fi
 
   tar -xzf "$tmp/$tarball" -C "$tmp" || fail "couldn't unpack $tarball"
@@ -308,7 +371,7 @@ configure_path() {
       ;;
     fish)
       rc="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
-      line="fish_add_path $disp"
+      line="fish_add_path \"$disp\""
       ;;
     *)    rc="$HOME/.profile"; line="export PATH=\"$disp:\$PATH\"" ;;
   esac

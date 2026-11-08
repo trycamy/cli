@@ -42,7 +42,11 @@ TARBALL="camy_${VER}_${OS}_${ARCH}.tar.gz"
 # With minisign installed (CI installs it), every fixture manifest is signed
 # with a throwaway key and the installer under test is a copy carrying that
 # key, so the signature path runs in every row; rows 16-18 cover its
-# failures. Without minisign the rows run checksum-only and 16-18 are skipped.
+# failures. Without minisign the signature is mandatory, so the installer would
+# refuse every row; run_case then passes the explicit CAMY_REQUIRE_SIGNATURE=0
+# opt-out and 16-18 are skipped. Rows 21-26 run in both modes: they put a PATH
+# with no minisign on the installer and pin the refusal, the https gate and the
+# opt-out.
 SIGN=""
 if command -v minisign >/dev/null 2>&1; then
   minisign -G -W -f -p "$WORK/test.pub" -s "$WORK/test.sec" >/dev/null 2>&1
@@ -52,6 +56,10 @@ if command -v minisign >/dev/null 2>&1; then
   INSTALLER="$WORK/install-signed.sh"
   SIGN=1
 fi
+# CAMY_REQUIRE_SIGNATURE for the rows that call env directly: 0 (the opt-out)
+# only when this host has no minisign to verify with, otherwise the default.
+OPTOUT=""
+[ -n "$SIGN" ] || OPTOUT=0
 sign_manifest() {
   [ -n "$SIGN" ] || return 0
   minisign -S -s "$WORK/test.sec" -m "$1" -x "$1.minisig" >/dev/null 2>&1
@@ -139,6 +147,7 @@ run_case() {
   out="$WORK/out-$name"
   set -- env CAMY_DL_BASE="http://127.0.0.1:$PORT/$subdir" \
              CAMY_INSTALL_DIR="$idir" CAMY_NO_MODIFY_PATH=1
+  [ -n "$SIGN" ] || set -- "$@" CAMY_REQUIRE_SIGNATURE=0
   [ -n "$pin" ] && set -- "$@" CAMY_VERSION="$pin"
   got_exit=0
   "$@" sh "$INSTALLER" >"$out" 2>&1 || got_exit=$?
@@ -253,7 +262,7 @@ else
   out="$WORK/out-11"
   got_exit=0
   env CAMY_DL_BASE="http://127.0.0.1:$PORT/good" CAMY_INSTALL_DIR="$ro/sub" \
-      CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" \
+      CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" CAMY_REQUIRE_SIGNATURE="$OPTOUT" \
     sh "$INSTALLER" >"$out" 2>&1 || got_exit=$?
   chmod 755 "$ro"
   if [ "$got_exit" = 1 ] && grep -qF "can't create" "$out"; then
@@ -291,7 +300,7 @@ idir="$WORK/install-13-docs-row-present"
 out="$WORK/out-13"
 got_exit=0
 env CAMY_DL_BASE="http://127.0.0.1:$PORT/withdocs" CAMY_INSTALL_DIR="$idir" \
-    CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" \
+    CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" CAMY_REQUIRE_SIGNATURE="$OPTOUT" \
     XDG_DATA_HOME="$xdg_data" XDG_CONFIG_HOME="$xdg_config" \
   sh "$INSTALLER" >"$out" 2>&1 || got_exit=$?
 if [ "$got_exit" = 0 ] && grep -qF "completions + man pages installed under" "$out" \
@@ -306,6 +315,121 @@ else
   sed 's/^/      | /' "$out" >&2
   FAIL=$((FAIL + 1))
 fi
+
+# rows 19-20 (CLI-UPDATE#3): CAMY_INSTALL_DIR is written into the shell rc
+# file, so a name that would run as code there — or a relative one — is
+# refused before anything is downloaded, and no rc file is touched.
+inject_home="$WORK/home-19"
+mkdir -p "$inject_home"
+# Row 19's literal $(touch ...) is the attack under test: it reaches the installer
+# unexpanded, and the installer must refuse it, never run it.
+# shellcheck disable=SC2016
+for row in '19-install-dir-shell-code:'"$WORK"'/bin$(touch '"$WORK"'/pwned-19)' '20-install-dir-relative:relative/bin'; do
+  name=${row%%:*}
+  dir=${row#*:}
+  out="$WORK/out-$name"
+  got_exit=0
+  env HOME="$inject_home" SHELL=/bin/zsh CAMY_DL_BASE="http://127.0.0.1:$PORT/good" \
+      CAMY_VERSION="$VER" CAMY_INSTALL_DIR="$dir" \
+    sh "$INSTALLER" >"$out" 2>&1 || got_exit=$?
+  if [ "$got_exit" = 1 ] && grep -qF "CAMY_INSTALL_DIR" "$out" \
+     && [ ! -e "$WORK/pwned-19" ] && [ ! -e "$inject_home/.zshrc" ]; then
+    echo "  ok $name"
+    PASS=$((PASS + 1))
+  else
+    echo "  x $name: exit $got_exit" >&2
+    sed 's/^/      | /' "$out" >&2
+    FAIL=$((FAIL + 1))
+  fi
+done
+
+# rows 21-26 (CAMY-B20): the signature check is mandatory. They run the
+# installer under a PATH that holds the tools it needs and NO minisign, so they
+# behave the same on a host that has minisign and on one that does not.
+NOMS="$WORK/bin-no-minisign"
+mkdir -p "$NOMS"
+for tool in awk basename cat chmod cp cut curl date dirname env find grep gzip head id ln ls mkdir mktemp mv rm rmdir sed sh shasum sha256sum sleep sort tail tar tr uname wc; do
+  tp=$(command -v "$tool" 2>/dev/null || :)
+  case "$tp" in /*) ln -sf "$tp" "$NOMS/$tool" ;; esac
+done
+
+# run_env NAME WANT_EXIT WANT_GREP ENV...: run the installer under env ENV...
+run_env() {
+  name=$1; want_exit=$2; want_grep=$3; shift 3
+  out="$WORK/out-$name"
+  got_exit=0
+  "$@" sh "$INSTALLER" >"$out" 2>&1 || got_exit=$?
+  if [ "$got_exit" = "$want_exit" ] && grep -qF "$want_grep" "$out"; then
+    echo "  ok $name"
+    PASS=$((PASS + 1))
+  else
+    echo "  x $name: exit $got_exit, want $want_exit and '$want_grep'" >&2
+    sed 's/^/      | /' "$out" >&2
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# row 21: a tampered tarball (the manifest still names the genuine digest) on a
+# host with no minisign. The installer refuses before it fetches anything.
+mkdir -p "$CHAN/r21" && cp "$CHAN/good/SHA256SUMS-$VER"* "$CHAN/r21/"
+printf 'tampered' > "$CHAN/r21/$TARBALL"
+log_before=$(wc -l < "$WORK/server.log")
+run_env "21-tampered-tarball-no-minisign-refused" 1 "minisign isn't installed" \
+  env PATH="$NOMS" CAMY_DL_BASE="http://127.0.0.1:$PORT/r21" \
+      CAMY_INSTALL_DIR="$WORK/install-21" CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER"
+if tail -n +$((log_before + 1)) "$WORK/server.log" | grep -q "GET /r21/" || [ -e "$WORK/install-21/camy" ]; then
+  echo "  x 21-tampered-tarball-no-minisign-refused: fetched or installed something" >&2
+  FAIL=$((FAIL + 1))
+else
+  echo "  ok 21-tampered-tarball-no-minisign-refused: nothing fetched, nothing installed"
+  PASS=$((PASS + 1))
+fi
+
+# row 22: the genuine channel, no minisign, no opt-out: refused, with the way out named
+run_env "22-no-minisign-refused-names-fix" 1 "CAMY_REQUIRE_SIGNATURE=0" \
+  env PATH="$NOMS" CAMY_DL_BASE="http://127.0.0.1:$PORT/good" \
+      CAMY_INSTALL_DIR="$WORK/install-22" CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER"
+
+# row 23: the explicit opt-out still installs, and the summary says the
+# signature was NOT checked (never "verified")
+run_env "23-opt-out-installs-and-says-so" 0 "signature NOT checked" \
+  env PATH="$NOMS" CAMY_DL_BASE="http://127.0.0.1:$PORT/good" \
+      CAMY_INSTALL_DIR="$WORK/install-23" CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" \
+      CAMY_REQUIRE_SIGNATURE=0
+if grep -qF "signature and checksum verified" "$WORK/out-23-opt-out-installs-and-says-so"; then
+  echo "  x 23-opt-out: claimed a verified signature" >&2
+  FAIL=$((FAIL + 1))
+else
+  echo "  ok 23-opt-out: no false 'signature verified' claim"
+  PASS=$((PASS + 1))
+fi
+
+# row 24: the opt-out does not excuse a tampered tarball: the checksum still fails
+run_env "24-opt-out-tampered-tarball-fails" 1 "checksum verification FAILED" \
+  env PATH="$NOMS" CAMY_DL_BASE="http://127.0.0.1:$PORT/r21" \
+      CAMY_INSTALL_DIR="$WORK/install-24" CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" \
+      CAMY_REQUIRE_SIGNATURE=0
+
+# row 25: a non-https base is refused before anything is fetched: plain http to
+# a real host, a loopback look-alike with userinfo, a loopback look-alike
+# sub-domain, a non-numeric port, another scheme
+for base in 'http://dl.example.invalid/stable' 'http://127.0.0.1@dl.example.invalid/stable' \
+            'http://127.0.0.1:80@dl.example.invalid/stable' 'http://localhost.example.invalid/stable' \
+            'http://127.0.0.1:8x/stable' 'ftp://dl.example.invalid/stable' 'dl.example.invalid/stable'; do
+  tag=$(printf '%s' "$base" | tr -c 'a-zA-Z0-9' '-')
+  run_env "25-non-https-base-refused-$tag" 1 "must be an https://" \
+    env PATH="$NOMS" CAMY_DL_BASE="$base" CAMY_INSTALL_DIR="$WORK/install-25" \
+        CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" CAMY_REQUIRE_SIGNATURE=0
+done
+
+# row 26: an https base passes the gate (it fails later, at the download, on a
+# closed local port) and so does the localhost spelling of the loopback exception
+run_env "26-https-base-passes-the-gate" 1 "download failed" \
+  env PATH="$NOMS" CAMY_DL_BASE="https://127.0.0.1:9/stable" CAMY_INSTALL_DIR="$WORK/install-26" \
+      CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" CAMY_REQUIRE_SIGNATURE=0
+run_env "26-localhost-loopback-passes-the-gate" 0 "installed" \
+  env PATH="$NOMS" CAMY_DL_BASE="http://localhost:$PORT/good" CAMY_INSTALL_DIR="$WORK/install-26b" \
+      CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" CAMY_REQUIRE_SIGNATURE=0
 
 echo ""
 echo "$PASS passed, $FAIL failed"
