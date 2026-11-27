@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/trycamy/cli/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/trycamy/cli?display_name=tag&sort=semver&style=flat-square&labelColor=1c1108&color=d04a1c"></a>
+  <a href="https://github.com/trycamy/cli/releases/latest"><img alt="Latest release" src="https://img.shields.io/badge/release-v1.0.7-d04a1c?style=flat-square&labelColor=1c1108"></a>
   <a href="https://github.com/trycamy/cli/releases/latest"><img alt="Release date" src="https://img.shields.io/github/release-date/trycamy/cli?style=flat-square&labelColor=1c1108&color=7a5f50&label=released"></a>
   <a href="https://github.com/trycamy/cli/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/trycamy/cli/ci.yml?branch=main&style=flat-square&labelColor=1c1108&label=ci"></a>
   <a href="docs/installation.md#homebrew"><img alt="Homebrew" src="https://img.shields.io/badge/brew_install-camy-1c1108?style=flat-square"></a>
