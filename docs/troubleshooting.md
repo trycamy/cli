@@ -109,7 +109,11 @@ country or region, a sign-in or any other command reads
 `Camy is not available in your country or region.`, and publishing a site
 from the canvas, or changing a published one, reads
 `Publishing is not available in your country or region.` Both exit 1 with
-no hint: trying again won't change the answer.
+no hint: trying again won't change the answer. A command camy.ai refuses
+because AI processing is off for your account reads
+`Turn on AI processing to use this.` and exits 1, with no hint; versions
+before 1.0.7 read
+`blocked at the edge or forbidden` here.
 
 A server fault (HTTP 5xx) is exit 1 as well, with the hint `try again`. It
 reads `camy.ai had a problem`, followed by `(request <id>)` when the server
@@ -228,6 +232,17 @@ why when the server does:
 Every one of them has `camy auth login` as its fix. On the two expiry cards
 the hint `camy auth login — one click renews it` appears only in the
 `--json` error object.
+
+From 1.0.7, a profile named with `--profile`, `CAMY_PROFILE` or
+`default_profile` that this computer doesn't have reads
+`no profile named "<name>": camy auth status lists yours` instead, still
+exit 3. Check the name for a typo.
+
+A key from `CAMY_API_KEY` is the exception. From 1.0.7, when camy.ai refuses
+it, on ordinary commands and on the chat connection, camy says
+`CAMY_API_KEY was refused by camy.ai: unset it, or use a current key` and
+exits 3. `camy auth login` can't help while that variable is set, since it
+wins over the profile's own key.
 
 That table applies to ordinary commands. On the chat connection, as in
 `camy chat`, `camy chat attach` and `camy approvals approve --wait`, a
@@ -641,8 +656,10 @@ directory.
 A Homebrew-managed `camy` is refused before any of this: `camy update`
 detects it and points you at `brew upgrade camy` instead. An npm-managed
 one is refused the same way, pointing at `npm update -g @camy/cli`;
-`camy uninstall` behaves the same for both. `camy update --check` still
-works on either, and names that command. Only a binary that lives in
+`camy uninstall` behaves the same for both. From 1.0.7, the `camy` inside
+`Camy.app` is refused too, with `this camy is part of the Camy app`; see
+[Camy for Mac](installation.md#camy-for-mac). `camy update --check` still
+works on any of them, and names what installs the new version. Only a binary that lives in
 Homebrew's own `Cellar` counts as Homebrew-managed, so a `camy` you copied
 straight into a Homebrew `bin` folder updates in place. See
 [Updating](installation.md#updating) and [npm](installation.md#npm).

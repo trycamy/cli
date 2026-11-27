@@ -7,7 +7,20 @@ working with [`camy doctor`](reference/camy_doctor.md).
 ## Supported platforms
 
 - macOS 13 or later, arm64 or amd64
-- Linux, arm64 or amd64
+- Linux, arm64 or amd64, and from 1.0.7 also 386, 32-bit ARM (ARMv6 and
+  ARMv7), ppc64le, s390x and riscv64
+- FreeBSD, arm64 or amd64, from 1.0.7
+
+The one-line installer and a manual download cover every platform above.
+Homebrew and npm carry macOS and Linux on arm64 and amd64 only.
+
+On FreeBSD, commands Camy runs on your computer are refused unless you turn
+the local sandbox off, because camy has no OS sandbox for it yet.
+`camy --version` says so on stderr:
+
+```text
+Commands don't run on FreeBSD: camy has no OS sandbox for it yet. Everything else works.
+```
 
 Running under WSL2 counts as Linux: install and update the same way you
 would on a native Linux machine.
@@ -40,11 +53,14 @@ The script itself never uses `sudo`. In order, it:
    version to fetch: either the value you passed in `CAMY_VERSION`, or the
    current version from that base's `VERSION` file. A `VERSION` older than
    the previous release is refused, so a rolled-back mirror can't steer a
-   fresh install onto an old build: the installer published with 1.0.6
-   refuses anything older than 1.0.5. A `CAMY_VERSION` pin is your own
+   fresh install onto an old build: the installer published with 1.0.7
+   refuses anything older than 1.0.6. A `CAMY_VERSION` pin is your own
    choice and skips that check.
-2. **Detects your platform.** OS (`darwin` or `linux`) and architecture
-   (`arm64` or `amd64`, with `aarch64` and `x86_64` accepted as aliases).
+2. **Detects your platform.** OS (`darwin`, `linux` or `freebsd`) and
+   architecture (`arm64` or `amd64`, with `aarch64` and `x86_64` accepted as
+   aliases, and on Linux also `i386` to `i686`, `armv6l`, `armv7l` or
+   `armv8l`, `ppc64le`, `s390x` or `riscv64`). A system or chip the release doesn't build stops the install
+   with a message that names it, before any tarball is downloaded.
 3. **Downloads and verifies.** It fetches your platform's release tarball
    and that release's own checksum manifest, `SHA256SUMS-<version>`. It
    verifies the manifest's signature with the camy release key built into
@@ -82,14 +98,15 @@ immediately. If none of those is writable, open a new terminal instead.
 — `export PATH="…"` for zsh, bash, and other POSIX shells, or
 `fish_add_path …` for fish — commented, so it's easy to find and remove.
 It's added even when the directory is on `PATH` some other way, and
-skipped only when the rc file already names it as `$HOME/…`.
+skipped only when a line of the rc file that isn't commented out already
+sets `PATH` with it as `$HOME/…`.
 
 The rc file is chosen from your `$SHELL`:
 
 | Shell | File |
 |---|---|
 | zsh | `~/.zshrc`, or `$ZDOTDIR/.zshrc` |
-| bash | `~/.bash_profile` on macOS, `~/.bashrc` on Linux |
+| bash | `~/.bash_profile` on macOS, `~/.bashrc` on Linux and FreeBSD |
 | fish | `~/.config/fish/config.fish` |
 | anything else | `~/.profile` |
 
@@ -162,8 +179,9 @@ available from 1.0.2 as `Camy_<version>_darwin.zip` on each
 [GitHub Release](https://github.com/trycamy/cli/releases/latest). Unzip it,
 move `Camy.app` to `/Applications` or `~/Applications`, and run
 `camy device install` from it to start the resident agent at every login.
-Every other command on this site works the same from the bundle's `camy` as
-from any other install, and you can link this Mac from any install. Only
+Apart from updating and uninstalling, below, every other command on this
+site works the same from the bundle's `camy` as from any other install, and
+you can link this Mac from any install. Only
 [`camy device install`](reference/camy_device_install.md) insists on the
 bundle. From any other install it exits 2 with this message:
 
@@ -175,6 +193,13 @@ camy: Linking a computer only works from the Camy app — download it at
 Despite its wording, the refusal is about installing the resident agent, not
 about linking. The link it gives is the latest GitHub Release, where the zip
 is.
+
+From 1.0.7, `camy update` and `camy uninstall` refuse the `camy` inside
+`Camy.app`, since it is part of the app, and exit 2 with
+`this camy is part of the Camy app`. The hint for `camy update` is
+`download the new Camy app at https://github.com/trycamy/cli/releases/latest`,
+and for `camy uninstall` it is `remove Camy from Applications`.
+`camy update --check` still reports what's out, and names that download.
 
 ## Manual download
 
@@ -299,6 +324,8 @@ Run with `sudo`, `camy update` keeps that copy, and writes shell
 completions, only in folders that belong to root. When the update folder
 is yours, as it is when `sudo` keeps your `HOME`, the update still
 installs, but without a copy to put back if the new version doesn't start.
+From 1.0.7 it also leaves no record of when it last checked for an update
+in your folders, so nothing is left there that you can't replace.
 
 If the channel has nothing newer than the binary you are running, `camy
 update` prints `up to date` and exits 0 without downloading anything. It
@@ -379,6 +406,18 @@ asks separately whether to also remove your config, state, cache, and any
 credential stored in the keychain. Answering no to the second prompt leaves
 your config and stored key in place, in case you're reinstalling.
 
+On a Mac linked to Camy, from 1.0.7, it asks one more question before that
+one:
+
+```text
+this Mac is linked to Camy; also remove the link? [y/N]
+```
+
+A yes does what [`camy device forget`](device.md#take-it-back) does: it
+stops the resident agent, deletes this Mac's keys, and revokes the link, or
+says to revoke it on camy.ai when it can't. No, or no answer, leaves the
+link.
+
 For scripts, pass `--confirm uninstall` to satisfy the confirmation gate
 and `--no-input` to skip the second prompt; `--no-input` without
 `--confirm` exits 2 (see [Exit codes](exit-codes.md)):
@@ -389,7 +428,8 @@ camy uninstall --confirm uninstall --no-input
 
 `--no-input` never removes config, state, or your keychain entry on its
 own: that step always requires an interactive answer, so a scripted
-uninstall never silently wipes a stored credential.
+uninstall never silently wipes a stored credential. It asks nothing about
+the link either, and leaves it.
 
 ## Next steps
 

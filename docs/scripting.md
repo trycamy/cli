@@ -88,6 +88,14 @@ Since 1.0.3 the shapes are uniform across commands:
   rows. A list inside one of camy's own objects is `[]` or `{}` when
   empty too, such as `entries` in `camy ledger --json` and `aliases` in
   `camy alias --json`.
+- A bare [`camy calls`](reference/camy_calls.md) or
+  [`camy runs`](reference/camy_runs.md) lists your calls or runs since
+  1.0.7 (it printed its help before, under `--json` too). Its `--json` is
+  camy.ai's own answer as one object, with the rows under `items`, not an
+  array.
+- Since 1.0.7 `camy ledger` and `camy local trust list` print their rows
+  on stdout, with the header line on stderr, so `$(camy ledger)` and a pipe
+  hold them and `-q` doesn't hide them. Before, every row went to stderr.
 - Since 1.0.6 `camy keys --json` gives every field in snake_case, so
   `createdAt` and `lastUsedAt` arrive as `created_at` and `last_used_at`.
   Update a script that read the old names.
@@ -520,7 +528,8 @@ camy api GET /v1/inbox --paginate
 ```
 
 `METHOD` and `PATH` are both required; a `PATH` without a leading `/` gets
-one.
+one. `METHOD` is GET, POST, PUT, PATCH or DELETE; any other word is a usage
+error (exit 2).
 
 **Request bodies.** `--field k=v` is repeatable and builds a JSON object.
 Values are strings by default; a trailing colon on the key, `k:=v`, parses
@@ -530,18 +539,26 @@ the value as raw JSON instead.
 camy api POST /v1/tasks --field title="renew passport" --field 'metadata:={"priority":1}'
 ```
 
-If you pass no `--field`, stdin is not a terminal, and the method is POST,
-PUT or PATCH, camy reads the body from stdin (up to 10MB) and requires it to
-parse as JSON:
+`--input FILE` sends a file as the body instead, and `--input -` reads
+stdin to the end, with whichever method you name. The body may be up to
+10 MiB and must parse as JSON; a blank one sends no body:
 
 ```bash
-echo '{"title":"renew passport"}' | camy api POST /v1/tasks
+camy api POST /v1/tasks --input task.json
+echo '{"title":"renew passport"}' | camy api POST /v1/tasks --input -
 ```
 
-A file redirected to stdin is read whole. A pipe is read only if data, or
-its end, shows up within 2 seconds; otherwise the request goes out with no
-body. A script that starts `camy api` with an open stdin it never writes
-to, as some process launchers and `ssh` do, no longer hangs.
+`camy api` never reads stdin on its own, so a call inside a
+`while read` loop leaves the loop's lines alone. Before 1.0.7, a POST, PUT
+or PATCH took whatever waited on stdin as its body; add `--input -` to a
+script that pipes one in. When a POST, PUT or PATCH sent with no body comes
+back 400 or 422 while data waits on stdin, the error carries the hint
+`a piped body needs --input -`.
+
+`--field` and `--input` together are a usage error (exit 2),
+`--field and --input both set the body; use one`, as are `--input -` at a
+terminal, a file camy can't read, a body over 10 MiB and one that isn't
+JSON, all before anything is sent.
 
 **`--paginate`** walks `limit=100&offset=N` pages and prints one flat JSON
 array of every row. It stops on a short page, and it stops on an endpoint
@@ -610,8 +627,8 @@ outright; use `CAMY_API_KEY` for headless authentication.
 
 `-f` / `--force` skips the `y/N` confirmation camy asks before a destructive
 action it is about to take itself — cancelling a job, revoking a key,
-deleting a schedule. It has no effect on approvals: it will not approve a
-checkpoint.
+deleting a schedule, sending an inbox reply Camy drafted. It has no effect
+on approvals: it will not approve a checkpoint.
 
 A few irreversible operations sit above `--force`, notably
 [`camy uninstall`](reference/camy_uninstall.md) and
@@ -691,6 +708,11 @@ script that tested the old ones:
   calls or your runs and jobs, exits 7, not 1.
 - A `camy device` command on a Mac that isn't linked to a Camy account
   exits 7, not 2.
+
+1.0.7 exits 1 where a command ran but didn't do its work and exited 0
+before, such as `camy canvas domain verify` before the record is seen, and
+2 for a flag value outside its list, before anything is sent.
+[Exit codes](exit-codes.md) lists each case.
 
 Exit 5 is worth handling explicitly. camy already retries a rate-limited GET
 up to four times, honoring `Retry-After` — on the wrapped commands, not on
@@ -864,9 +886,8 @@ On success it prints one line on stdout, `✓ Saved. Find it in For You.` or
 `✓ Saved. Camy keeps it but cannot open it yet.`, followed by the
 capture's id. `--json` prints camy.ai's answer instead.
 
-**`camy api`** reads a JSON request body from stdin for POST, PUT and PATCH
-when no `--field` was given, waiting up to 2 seconds for a pipe, as
-described above.
+**`camy api`** reads a JSON request body from stdin only with `--input -`,
+as described above.
 
 Because every prompt reads `/dev/tty` rather than stdin, piping data in never
 collides with a confirmation — and piping `y` in never answers one.
@@ -881,7 +902,7 @@ For human output the usual conventions apply, in this order:
 
 | Signal | Effect |
 | --- | --- |
-| `--color never` / `--color always` | wins over everything below, except that `TERM=dumb` always means no colour; with `always`, an empty or unset `TERM` still gets 16 colours, or more if `COLORTERM` says so |
+| `--color never` / `--color always` | wins over everything below, except that `TERM=dumb` always means no colour; with `always`, an empty or unset `TERM` still gets 16 colours, or more if `COLORTERM` says so. A word other than `auto`, `always` or `never` is a usage error (exit 2) |
 | config `color = never` or `off` | same as `--color never` |
 | `NO_COLOR` (any non-empty value), `CLICOLOR=0`, `TERM=dumb` | color off |
 | `FORCE_COLOR`, `CLICOLOR_FORCE` (any non-empty value) | color on even when piped, and with an empty or unset `TERM`, as with `--color always` |

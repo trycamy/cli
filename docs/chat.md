@@ -233,7 +233,8 @@ your profile has seen that copy kept, the `--temp` line in
 A temporary chat also can't hold an approval. If a tool call in a `--temp`
 turn needs your sign-off and camy can't prompt for it right then, the turn
 fails outright instead of leaving a pending checkpoint with nowhere to
-attach to later.
+attach to later. A question card a `--temp` turn asks at a terminal is
+answered as in any other chat, and the turn goes on.
 
 ### stdin as context
 
@@ -511,7 +512,10 @@ pipeline live chat uses. `camy chats export ID` writes a portable markdown
 transcript to stdout — markdown is the only export format today. Both
 accept a short id prefix the same way `--chat` does, and both hide the
 internal checkpoint-response bookkeeping a raw transcript would otherwise
-clutter the reading with.
+clutter the reading with. When a turn is still waiting on a card, `show`
+draws that card where the turn stopped, as `camy approvals show` does, so
+the transcript says what Camy is waiting for, and `export` ends that turn
+on the card's own words.
 
 ### Searching past chats
 
@@ -575,8 +579,8 @@ camy calls search "the plumber"
 camy calls search "invoice" --filter need_you
 ```
 
-`camy calls` holds your call history, and its one verb, `search`, finds a
-call by what was said on it. `camy calls` on its own prints its help.
+`camy calls` on its own lists your calls, newest first, and its one verb,
+`search`, finds a call by what was said on it.
 
 The first line counts the hits (`4 calls matched`). Each call then shows
 the caller (the name when there is one, otherwise the number, otherwise
@@ -681,7 +685,7 @@ of those keys and every slash command.
 | `/queue` | What is waiting to send when this turn ends. Enter steers the chosen message into the running turn now (`steered:`); it leaves the queue once the turn has taken it, or once the chat has saved it without this turn taking it in (`saved to the chat:`, never sent again), and otherwise goes next (`next:`). `d` drops it. A steered message the turn ended without using comes back to the top of `/queue` (`not used by that turn:`) and waits there: it never sends by itself, Enter sends it, and `d` drops it. |
 | `/usage` | Your plan and credits — the same pane as `camy plan`. Credits never appear on the status row. |
 | `/help` | Keys and commands (also `?` or F1). |
-| `/<verb>` | Any read-only camy verb — `/feed`, `/tasks`, `/canvas`, `/doctor`, `/schedule`, `/ledger`, `/connectors` … — runs through the same renderer into the transcript; one that only groups other verbs, such as `/local`, `/runs` or `/calls`, prints its help there. A verb that changes things, such as `/capture`, doesn't run: the app names the `camy` command to run from a shell instead. |
+| `/<verb>` | Any read-only camy verb — `/feed`, `/tasks`, `/canvas`, `/doctor`, `/schedule`, `/ledger`, `/connectors` … — runs through the same renderer into the transcript; one that only groups other verbs, such as `/local`, prints its help there. A verb that changes things, such as `/capture`, doesn't run: the app names the `camy` command to run from a shell instead. |
 | `/quit` | Leaves — anything scheduled keeps running. |
 
 Esc stops any command the turn is running on this machine, asks the server

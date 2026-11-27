@@ -10,13 +10,13 @@ SBOM, and knowing exactly what is inside a release tarball.
 
 | File | What it is | Where |
 | --- | --- | --- |
-| `camy_<version>_<os>_<arch>.tar.gz` | One platform's tarball: the `camy` binary at its root, `README.md`, and, when the release ships them, `completions/` and `manpages/` directories. | Both |
-| `camy_<version>_<os>_<arch>.tar.gz.sbom.cdx.json` | A CycloneDX SBOM for that tarball. | Both |
+| `camy_<version>_<os>_<arch>.tar.gz` | One platform's tarball: the `camy` binary at its root, `README.md`, and, when the release ships them, `completions/` and `manpages/` directories. | Both for macOS and Linux on arm64 and amd64; the channel only for the rest, from 1.0.7 |
+| `camy_<version>_<os>_<arch>.tar.gz.sbom.cdx.json` | A CycloneDX SBOM for that tarball. | Both for macOS and Linux on arm64 and amd64; the channel only for the rest, from 1.0.7 |
 | `SHA256SUMS-<version>` | That release's own checksum manifest, under a version-scoped name so it is never overwritten. The signatures cover this file. | Both |
 | `SHA256SUMS-<version>.sig` | Detached cosign signature for that manifest. | Both |
 | `SHA256SUMS-<version>.pem` | The certificate that signature was made with. | Both |
 | `SHA256SUMS-<version>.minisig` | minisign signature for that manifest. | Both |
-| `camy_<version>.intoto.jsonl` | SLSA build provenance covering the four tarballs, from 1.0.1 on, and the Camy.app zip, from 1.0.3 on. | Both |
+| `camy_<version>.intoto.jsonl` | SLSA build provenance covering every tarball, from 1.0.1 on (four through 1.0.6, eleven from 1.0.7), and the Camy.app zip, from 1.0.3 on. | Both |
 | `Camy_<version>_darwin.zip` | Camy.app, the notarized Mac application, with a `.sha256` sidecar, from 1.0.2 on. | Both |
 | `Camy_<version>_darwin.zip.sig` | Detached cosign signature for the zip, from 1.0.3 on. | Both |
 | `Camy_<version>_darwin.zip.pem` | The certificate that signature was made with. | Both |
@@ -46,6 +46,11 @@ below, and uploads the same files. The channel is the origin of every asset.
 
 Pick whichever is easier to script against. The tarballs and SBOMs are
 byte-identical in both.
+
+From 1.0.7 the GitHub Release carries the tarballs and SBOMs for macOS and
+Linux on arm64 and amd64. The tarballs for FreeBSD and for Linux on 386,
+32-bit ARM, ppc64le, s390x and riscv64, and their SBOMs, are on the release
+channel only. The checksum manifest and the provenance name all eleven.
 
 ## Verifying a checksum
 
@@ -156,8 +161,8 @@ version-scoped file.
 ## Verifying build provenance
 
 From 1.0.1 on, every release also publishes `camy_<version>.intoto.jsonl`,
-a [SLSA](https://slsa.dev/) provenance statement over the four
-tarballs and, from 1.0.3 on, the Camy.app zip. Where the cosign signature proves who signed the checksum
+a [SLSA](https://slsa.dev/) provenance statement over the release's
+tarballs (four through 1.0.6, eleven from 1.0.7) and, from 1.0.3 on, the Camy.app zip. Where the cosign signature proves who signed the checksum
 manifest, the provenance proves how the tarballs came to exist: which
 source repository and tag they were built from, and by which builder. It is
 generated and signed not by the CLI's own release workflow but by the SLSA

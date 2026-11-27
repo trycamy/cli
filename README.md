@@ -47,7 +47,7 @@
 ## Install
 
 ```bash
-# macOS and Linux, arm64 and amd64. No sudo.
+# macOS, Linux and FreeBSD. No sudo.
 curl -fsSL https://camy.ai/cli/install.sh | sh
 
 # or, with Homebrew

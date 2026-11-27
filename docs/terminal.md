@@ -51,7 +51,8 @@ Once color is on, the rung comes from `COLORTERM` and `TERM`:
 | `TERM` unset or `dumb` | no color |
 
 `--color` (`auto`, `always`, or `never`; default `auto`) sits above all of
-this.
+this. Any other word is a usage error (exit 2):
+`unknown value "bogus" for --color: use auto, always or never`.
 
 The config key `color` accepts `auto`, `always`, `never`, and `off`, but
 only `never` and `off` have an effect — both force color off; `always` in

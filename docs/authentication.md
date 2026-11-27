@@ -26,6 +26,12 @@ By default, `camy auth login` uses a browser device flow.
      <verification link> ↗
    ```
 
+   Under the link camy draws its QR code, so you can open it with a phone.
+   The code is left out when stderr isn't a terminal, with `--accessible`,
+   `CAMY_ACCESSIBLE=1` or `TERM=dumb`, in a locale that isn't UTF-8, and in a
+   terminal under 37 columns. [`camy device enroll`](device.md) draws its link's code the same
+   way.
+
 2. camy opens the link in your browser, but only when it is on the same
    registrable domain as your `api_url`. If it is not, camy prints
    `sign-in URL … isn't on your api_url's domain — refusing to open it`,
@@ -214,12 +220,29 @@ Before it mints this terminal's key, camy asks for one more, fresh check:
 Minting this terminal's key needs a fresh check that it's you.
 ```
 
-If your account uses an authenticator, type its next code, not the one you
-just used, or press Enter to get a code by email. Otherwise camy emails you
-a second code; camy.ai sends one code a minute, so camy may wait up to a
-minute before it sends it. A code that doesn't confirm it's you gets two more
-tries. After that camy stops with `that code didn't confirm it's you`
-(exit 3), and nothing is changed.
+It asks for the proof your account has:
+
+- An account with a password: `password: `, then, with two-factor
+  authentication on, `authenticator code (or a backup code): `.
+- An account with an authenticator or backup codes but no password:
+  `authenticator code (or a backup code): ` alone.
+- An account that signs in only with codes by email: camy.ai emails you a
+  code for minting keys (`We sent a code to <email>.`), and camy asks for it
+  with `code: `.
+
+Right after a sign-in that used an authenticator code, the code prompt asks
+for its next one instead:
+`your authenticator's NEXT code — not the one you just used: `. A proof
+that doesn't confirm it's you gets two more tries. After that camy stops
+with `that code didn't confirm it's you` (exit 3), and nothing is changed.
+
+An account that signs in only with a passkey can't give that proof in a
+terminal, so camy stops instead of asking for one (exit 3):
+
+```text
+camy: Minting this terminal's key needs you to confirm it's you
+      — your account signs in with a passkey, which a terminal can't use. camy auth login (the browser sign-in) mints it with one click
+```
 
 Like the browser sign-in's key, the key a `--code` sign-in mints is marked
 as this terminal's sign-in key, which is the only kind of key
@@ -358,7 +381,7 @@ camy: device:link isn't a scope for this terminal's key — it belongs to this M
 | `data:actions:append_memory` | Appending to memory as a card action | |
 | `data:actions:append_dataset` | Appending to a dataset as a card action | |
 | `capture:write` | [`camy capture`](reference/camy_capture.md) | ✓ |
-| `capture:read` | Reading your captures | |
+| `capture:read` | Reading your captures | ✓ |
 | `keys:manage` | `camy keys` self-management | ✓ |
 | `workspace:exec` | Running commands in your cloud workspace: [`camy vm exec`](reference/camy_vm_exec.md) and [`camy vm shell`](reference/camy_vm_shell.md) | ✓ |
 | `bridge:register` | Letting this terminal offer Camy its local tools; see [The local bridge](local-bridge.md) | ✓ |
@@ -392,6 +415,10 @@ connector, webhook, call, and account commands need. A key from an earlier
 sign-in keeps the scopes it was minted with, and camy.ai can refuse those
 commands for it with `this key lacks a required scope`.
 
+`capture:read` joined the default set in 1.0.7. A key from an earlier
+sign-in keeps the scopes it was minted with; run `camy auth login` again to
+add it.
+
 A key from an earlier `camy auth login` still offers local tools without
 `bridge:register`. When camy.ai won't let a key offer them, the session goes
 on without local tools, and camy says so once, in camy.ai's words, or with
@@ -421,8 +448,11 @@ finishes the job. With `--json`, the signed-in object carries
 is absent.
 
 With `camy auth login --code`, camy looks for this machine's key, the one
-named exactly `camy-cli @ <hostname>`. When that key exists, what happens to
-it depends on whether you passed `--scopes`:
+named exactly `camy-cli @ <hostname>` that an earlier sign-in on this
+profile stored. A key of that name that camy didn't store here, such as
+another computer's with the same hostname, is never rotated or revoked:
+camy mints a dated key beside it, named as below. When this machine's key
+exists, what happens to it depends on whether you passed `--scopes`:
 
 - **No `--scopes`**, and the key already holds every scope the sign-in asks
   for: camy **rotates** the existing key in place. Rotation keeps the key's
@@ -660,6 +690,14 @@ A `CAMY_API_KEY` that holds only spaces, tabs, or a newline counts as
 unset, so camy uses the profile's stored key. A key from `CAMY_API_KEY`
 isn't tied to an address; see [The Camy a key belongs to](#the-camy-a-key-belongs-to).
 
+When camy.ai refuses the key in `CAMY_API_KEY`, because it is unknown,
+expired, or revoked, camy says so, rather than `not signed in`, and exits 3.
+Signing in can't help while the variable is set:
+
+```text
+camy: CAMY_API_KEY was refused by camy.ai: unset it, or use a current key
+```
+
 If you've also explicitly chosen a profile (with `--profile`, `CAMY_PROFILE`,
 or `default_profile`) while `CAMY_API_KEY` is set, camy prints a one-time
 caution so it's clear which credential actually won:
@@ -759,7 +797,10 @@ once it has such a table, which you can add with
 [`camy config edit`](reference/camy_config_edit.md), or once you sign in to
 it. It also doesn't check that `NAME` has a signed-in key; if it doesn't,
 commands run under it report "not signed in" until you run
-`camy auth login` there too.
+`camy auth login` there too. A profile this computer doesn't have at all,
+named with `--profile`, `CAMY_PROFILE`, or `default_profile`, stops a
+command that needs a key with `no profile named "NAME": camy auth status lists yours`
+(exit 3).
 
 Select a profile for a single command with `--profile` or `CAMY_PROFILE`:
 

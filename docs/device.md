@@ -32,11 +32,15 @@ To link it on its own, for example after signing in with `--no-device`:
 camy device enroll
 ```
 
-The command prints a short code and a link on camy.ai. Open the link, confirm
+The command prints a short code and a link on camy.ai, and from 1.0.7 a QR
+code of the link under it, in the cases
+[Quick start](quickstart.md#sign-in) lists. Open the link, confirm
 the code, and approve the link in the browser; the command waits until you
 do. Ctrl-C while it waits stops it and removes the signing key it had
-started to make. Under `--no-input` it refuses, because linking needs a
-browser approval:
+started to make. If camy.ai no longer knows the code, the command stops at
+once with `that sign-in is no longer pending — nothing more will arrive from it`
+and the hint `run camy device enroll again`, exit 1. Under `--no-input` it
+refuses, because linking needs a browser approval:
 
 ```text
 camy: linking a computer needs a browser approval
@@ -337,6 +341,11 @@ Three actions, deliberately separate:
   the server (`✓ this Mac forgot its link to Camy, and <name> is revoked.`);
   otherwise it says to revoke it there too. With `--json`, the object
   carries `launch_agent_removed`, `true` when it removed the LaunchAgent.
+  If this Mac's own credential can't be removed, for example because the
+  keychain is locked or denies access, `forget` stops before it erases the
+  record, the ledger or the cached files, and exits 1 saying the key is
+  still stored. Unlock or allow access to the keychain and run
+  `camy device forget` again.
   A Mac you forgot with an earlier version keeps its LaunchAgent, which now
   starts once at each login and stops; `camy device uninstall` removes it.
 - **`camy device uninstall`** stops the background agent. The link stays.

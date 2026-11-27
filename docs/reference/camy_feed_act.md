@@ -19,6 +19,8 @@ camy feed act ID ACTION_ID [flags]
 ### Options
 
 ```
+      --body string   edit: the draft's new words
+      --edit          edit: open the draft in $EDITOR first
   -h, --help          help for act
       --note string   optional note to send with the action
 ```

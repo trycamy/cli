@@ -93,6 +93,17 @@ camy connectors resume <name>
 camy connectors remove <name>
 ```
 
+Name a connection by its name, the start of its name, or its id, which
+`--json` shows. Names aren't unique: when two of your connections have the
+same name, these commands, `review` included, act on neither, and exit 2
+listing each one with its id:
+
+```text
+camy: "linear" matches Linear (<id>), Linear (<id>) — say which
+```
+
+Run the command again with the id.
+
 `check` tests the connection now and prints what it found:
 
 ```text

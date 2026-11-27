@@ -69,11 +69,12 @@ helpers turned off, whether it ran on its own or you approved its card. A
 diff comes back as plain text even if you use an external diff tool, and
 `git remote show` can't use your credential helper.
 
-`run_command` is killed if it outlives its timeout: two minutes unless the
-call asks for longer, and never more than 30 minutes. A longer request is
-cut to 30 minutes, and the result tells the agent so. A background command
-has no timeout. A foreground command's stdout and stderr are each captured
-up to 1 MB and then truncated, with the result marked as truncated.
+`run_command` is killed, with every process it started, if it outlives its
+timeout: two minutes unless the call asks for longer, and never more than
+30 minutes. A longer request is cut to 30 minutes, and the result tells
+the agent so. A background command has no timeout. A foreground command's
+stdout and stderr are each captured up to 1 MB and then truncated, with the
+result marked as truncated.
 
 To stop a command while it runs, press `esc` in the camy app (`camy`, or
 `camy --inline`) while the turn is busy. It stops every command running on
@@ -109,6 +110,14 @@ A `write_file` that asks for a file mode camy can't read is refused before
 anything is written, rather than written with the default mode; a mode is
 an octal string such as `"0755"`. A mode that sets the setuid or setgid
 bit is refused too.
+
+When camy.ai asks for a new file because Camy found none at that path,
+`write_file` only creates it: if a file appeared there in the meantime, it
+is left as it is and the write is refused, for example
+`plan.md appeared on this computer after Camy checked, so it won't overwrite it. Read it first.`
+A write camy.ai marks as one to an existing file Camy hasn't read draws the
+read-first card instead of a write card; see
+[The approval card](approvals.md#the-approval-card).
 
 Before `write_file` or `edit_file` replaces a file, camy keeps a copy of
 what was there, under your profile's state directory, never in your project
@@ -364,7 +373,8 @@ below. Within that boundary:
   a page at a time, marked truncated, with the offset to read on from.
 - `list_dir` lists one directory, or walks up to eight levels below it with
   an include or exclude glob (`**/*.tsx`) to find files by name. It caps
-  the number of entries it returns at 1,000.
+  the number of entries it returns at 1,000. An include pattern that isn't
+  a valid glob, such as `[`, is refused rather than matching nothing.
 - `grep` skips any single file above 5 MB, and finds matches on any line
   within that, however long. Each matched line's text is cut to 2,000
   bytes and ends in `…`. An invalid regular expression is refused.
@@ -512,6 +522,13 @@ inside the project root, a temp directory, and your user cache directory.
 
 `observe` leaves commands unconfined.
 
+FreeBSD has no sandbox camy can use, so there camy refuses every command
+the agent asks to run, under `observe` and `enforce` alike, and
+`camy --version` says
+`Commands don't run on FreeBSD: camy has no OS sandbox for it yet. Everything else works.`
+Only `--sandbox off` or `CAMY_LOCAL_SANDBOX=off` runs a command there,
+unconfined. The file tools work as they do anywhere else.
+
 An unset dial counts as `enforce` only where this machine can fully
 enforce it. On macOS that takes `sandbox-exec`. On Linux it takes a `bwrap`
 installed for the whole system, such as your distribution's package, that
@@ -545,6 +562,14 @@ enforce it, and on such a machine camy.ai can move an unset session to
 pages that list it, give the same date. Nothing camy.ai sends can move the
 dial toward `off`, and an explicit `--sandbox observe` or
 `CAMY_LOCAL_SANDBOX=observe` always stays `observe`.
+
+A value other than `off`, `observe`, or `enforce` counts as unset, never as
+`off`: the run gets the unset default, and camy says so once on stderr,
+naming the mode it uses:
+
+```text
+camy: --sandbox="enfroce" is not off|observe|enforce; this run uses enforce.
+```
 
 When `enforce` stops a command, camy.ai can ask again with a card that
 loosens the sandbox for that one run: either letting it write to more

@@ -260,7 +260,8 @@ hangup unwinds the session cleanly, restoring your local terminal to normal
 A dropped network connection does not end `camy vm shell`: it redials in
 place instead of exiting. A reconnect opens a new shell and says so —
 nothing from the old session carries over, including anything you typed as
-it dropped, so retype it once you're back.
+it dropped or while it reconnected, which is thrown away rather than run in
+the new shell, so retype it once you're back.
 
 A connection that keeps dropping is not given up on. After ten reconnects
 within five minutes, camy waits a little before each further try, longer

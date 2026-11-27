@@ -2,6 +2,10 @@
 
 your call history, searchable by what was said
 
+```
+camy calls [flags]
+```
+
 ### Examples
 
 ```
@@ -12,7 +16,9 @@ camy calls search X --filter need_you   only the ones waiting on you
 ### Options
 
 ```
-  -h, --help   help for calls
+      --filter string   all|need_you|messages|handled|spam
+  -h, --help            help for calls
+  -L, --limit int       page size (default 25, most recent first) (default 25)
 ```
 
 ### Options inherited from parent commands

@@ -309,6 +309,10 @@ which profile the invocation uses, but not which row is marked. With
 `default_profile` in `config.toml`. It does not itself check that a
 `[profile.NAME]` table exists, and a profile doesn't need one.
 
+A command that needs a key, run under a profile this computer doesn't have,
+named with `--profile`, `CAMY_PROFILE`, or `default_profile`, stops with
+`no profile named "NAME": camy auth status lists yours` (exit 3).
+
 To use a profile for a single command without switching your default:
 
 ```bash
@@ -388,7 +392,7 @@ and `--no-input` in more depth.
 | `-v`, `--verbose` | — | Print one line on stderr for each API request most commands make, with the method, path, status, time taken and request ID. `camy api`, file uploads and downloads, and streamed chat and terminal sessions print none. Also shows where the active API key came from. |
 | `--no-input` | — | Never prompt. A checkpoint fails closed (exit 4); any other prompt exits with a usage error (exit 2). |
 | `-f`, `--force` | — | Skip a destructive-operation confirmation prompt. Does not bypass the stronger, typed-word confirmation `camy auth logout --revoke` uses. |
-| `--color VALUE` | — | `auto`, `always`, or `never`. |
+| `--color VALUE` | — | `auto`, `always`, or `never`. Any other word stops the command before anything is sent, with `unknown value "bogus" for --color: use auto, always or never` (exit 2). |
 | `--ground VALUE` | `CAMY_GROUND` | `dark`, `light`, or `auto`: the palette's ground. `auto`, or leaving it off, lets `camy` detect it; see [Terminal output and accessibility](terminal.md#ground-dark-or-light). |
 | `--accessible` | `CAMY_ACCESSIBLE=1` | Linear output: no spinners, boxes, or redraws. |
 | `--no-pager` | — | Never page output. |
@@ -397,7 +401,7 @@ and `--no-input` in more depth.
 | `--api-url URL` | `CAMY_API_URL` | API origin override. |
 | `--no-local` | `CAMY_NO_LOCAL=1` | Disable the local bridge entirely for this session. |
 | `--read-only` | `CAMY_LOCAL_READONLY=1` | Local bridge reads only — no `run_command`/`write_file` this session. |
-| `--sandbox MODE` | `CAMY_LOCAL_SANDBOX` | `off`, `observe`, or `enforce`: how the operating system confines commands the local bridge runs, for this invocation only. Left unset, it is `enforce` where the OS can fully enforce it and `observe` elsewhere; see [The local bridge](local-bridge.md#the-boundary-and-the-sandbox). |
+| `--sandbox MODE` | `CAMY_LOCAL_SANDBOX` | `off`, `observe`, or `enforce`: how the operating system confines commands the local bridge runs, for this invocation only. Left unset, or set to any other word, it is `enforce` where the OS can fully enforce it and `observe` elsewhere; see [The local bridge](local-bridge.md#the-boundary-and-the-sandbox). |
 | `--cloud` | `CAMY_CLOUD=1` | Use your cloud workspace as the default, even with the local bridge live. |
 | `--inline` | `CAMY_INLINE=1` | Classic scrollback app instead of the full-screen surface. |
 | `--no-project-instructions` | `CAMY_NO_PROJECT_INSTRUCTIONS=1` | Never read this project's `AGENTS.md`/`CLAUDE.md` into a chat session. |

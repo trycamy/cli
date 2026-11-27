@@ -2,6 +2,10 @@
 
 what your agents did, and what they said
 
+```
+camy runs [flags]
+```
+
 ### Examples
 
 ```
@@ -12,7 +16,11 @@ camy runs search X --status failed   only the ones that failed
 ### Options
 
 ```
-  -h, --help   help for runs
+  -h, --help            help for runs
+  -L, --limit int       page size (default 25, newest first) (default 25)
+      --offset int      skip this many runs (the next page: --offset LIMIT)
+      --source string   scheduled_agent|kernel_schedule|web_monitor|standing_goal
+      --status string   running|completed|dispatched|skipped_empty|needs_attention|failed
 ```
 
 ### Options inherited from parent commands

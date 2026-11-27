@@ -7,7 +7,7 @@ and out of Camy without a chat turn.
 | --- | --- | --- |
 | [Jobs](#jobs) | `camy jobs` | durable, multi-day work |
 | [Schedules](#schedules) | `camy schedule` | one instruction on a timer |
-| [Runs](#runs) | `camy runs search` | what your agents did, and what they said |
+| [Runs](#runs) | `camy runs` | what your agents did, and what they said |
 | [Tasks](#tasks) | `camy tasks` | quick to-dos; nothing fires on its own |
 | [Capture](#capture) | `camy capture` | save text to Camy without a chat |
 | [Integrations](#integrations) | `camy integrations` | connected accounts |
@@ -36,7 +36,7 @@ still has a stale timestamp on the row, since a terminal job fires never.
 
 | Flag | Effect |
 | --- | --- |
-| `--status string` | one of `active`, `suspended`, `blocked`, `completed`, `failed`, `cancelled`, `needs_attention`, passed straight through and not validated locally |
+| `--status string` | one of `active`, `suspended`, `blocked`, `completed`, `failed`, `cancelled`, `needs_attention`; anything else is a usage error before any network call |
 | `-L, --limit int`, `--offset int` | page manually; `--limit` takes 1 to 100 (default 100), and anything else is a usage error before any network call |
 | `--all` | auto-paginate to the end |
 
@@ -70,7 +70,7 @@ characters.
 
 | Flag | Effect |
 | --- | --- |
-| `--status string` | the same values as `camy jobs --status`, passed straight through; a value the server doesn't know finds nothing rather than failing |
+| `--status string` | the same values as `camy jobs --status`, checked the same way |
 | `-L, --limit int` | how many to show, 1 to 100 (default 25) |
 | `--offset int` | skip that many matches (default 0); a negative value is a usage error before any network call |
 
@@ -156,7 +156,8 @@ The reminders-and-timers half of the list covers the first 100 that are
 still pending (active, paused, or snoozed), soonest fire first. When all
 100 come back, the count above the list reads `N+ schedules` and a line
 under it says more are active than shown. If reading those, or your
-scheduled tasks, fails, the list quietly leaves them out.
+scheduled tasks, fails, the list leaves them out and stderr says which, as
+in `some schedules couldn't be read: reminders`; the exit is still 0.
 
 ### Creating a schedule
 
@@ -174,7 +175,7 @@ short report to the channels in `--channels`.
 | --- | --- | --- |
 | `"07:00"` | daily at that time; the first fire is tomorrow if it's already past today | `0 7 * * *` |
 | `"hourly"` | the next top of the hour on the timezone's clock, then every hour after | `0 * * * *` |
-| `"mon 07:00"` | weekly, that weekday and time (`sun`…`sat`, first 3 letters, case-insensitive) | `0 7 * * 1` |
+| `"mon 07:00"` | weekly, that weekday and time (`sun`…`sat`, or the whole name such as `monday`, case-insensitive) | `0 7 * * 1` |
 
 ```bash
 camy schedule create "07:00" --run "prep my morning brief"
@@ -187,12 +188,14 @@ happens after the timezone is settled, so unless you pass `--tz` the CLI
 first looks up your account's timezone, one network call.
 
 Any other value is refused client-side as a usage error before the
-schedule is created. A value containing the word "weekday", or with four or more
+schedule is created. A value containing the word "weekday", a list or range
+of days such as `mon-fri 09:00` or `tue/thu 09:00`, or a value with four or more
 spaces in it — the CLI's rough heuristic for "this looks like a cron
 expression" — gets a specific message saying weekday subsets and cron
 expressions aren't schedulable yet.
 
-Anything else unparseable gets a generic "couldn't parse" error. Both list
+Anything else unparseable gets a generic "couldn't parse" error, including
+a word that only starts like a day, such as `month 09:00`. Both list
 the three supported forms as the hint.
 
 The time in `WHEN` is 24-hour `H:MM` or `HH:MM` and nothing more: write
@@ -221,6 +224,16 @@ deletes the half-made task and shows the refusal, so you're never left
 with a task that isn't the one you asked for. If that delete fails too,
 the error names the task and the `camy schedule delete` command that
 removes it.
+
+A create that fails in a way that may still have reached camy.ai, such as
+a timeout or a dropped connection, says
+`check camy schedule before retrying — it may already exist`, so a retry
+doesn't make the schedule twice. `camy tasks add` says the same with
+`camy tasks`.
+
+Before 1.0.7, a list or range of days such as `mon-fri 09:00`, or a word
+that only starts like a day, made a weekly schedule on the first day
+named. If `camy schedule` lists one, check that it fires when you meant.
 
 A schedule made with `schedule create` before 1.0.4 never ran its
 instruction. If `camy schedule` still lists one, delete it and create it
@@ -329,9 +342,24 @@ camy docs time
 ## Runs
 
 A run is one firing of something that works on its own: a job, a
-scheduled task, a schedule, a web monitor, or a standing goal. `camy runs
-search` looks through your runs, and through what your agents wrote while
-they ran.
+scheduled task, a schedule, a web monitor, or a standing goal. `camy runs`
+lists your runs, and `camy runs search` looks through them, and through
+what your agents wrote while they ran.
+
+```bash
+camy runs
+camy runs --status failed
+```
+
+Lists your runs newest first, under a count of how many it shows and how
+many need you: each run's mark, what ran, its state, and how long ago.
+When there are more than the page holds, a line under the list names the
+flag for the next page, as in
+`more runs than this page shows — --offset 25 for the next page`. With none
+it says `no runs yet`. It takes `--status`, `--source`, `-L` and `--offset`
+with the same values and limits as `camy runs search` below. `--json`
+prints camy.ai's answer as it came, an object whose `items` holds the runs
+and whose `has_more` says whether another page follows.
 
 ```bash
 camy runs search "timeout"
@@ -550,8 +578,9 @@ from a terminal is a usage error pointing at camy.ai.
 
 The wait lasts up to six minutes; Ctrl-C stops waiting, and nothing is
 connected until you finish in the browser. If it runs out, the command says
-the account isn't connected yet and suggests running it again for a fresh
-link. If the account already worked and nothing about it changed, it says
+the account isn't connected yet, suggests running it again for a fresh
+link, and exits 1; stopping with Ctrl-C exits 0. If the account already
+worked and nothing about it changed, it says
 `gmail is connected` instead, since it can't tell whether your sign-in went
 through, and points at `camy integrations health gmail`. It says the same,
 without waiting further, when Camy couldn't read the account before the
@@ -709,6 +738,8 @@ Every command in this document supports `--json`. Shapes vary by command:
 - `camy jobs --all` / `camy webhooks deliveries --all` on a mid-sweep
   failure — `{"partial": true, "results": [...], "rows": N, "error": "..."}`,
   still a non-zero exit.
+- `camy runs` — the server's whole answer as one object, with the runs in
+  `items` and `has_more` saying whether another page follows.
 - `camy jobs search`, `camy runs search` — the server's whole answer as one
   object, not an array, so it carries whether more matched: `truncated`
   for jobs; `has_more`, the `output_matches` list, and

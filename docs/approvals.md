@@ -259,8 +259,9 @@ Attaching takes a moment. The resume is spawned on the server
 asynchronously, so the CLI waits up to 120 seconds before it trusts that the
 turn is actually idle rather than just not-yet-resumed.
 
-It then keeps waiting on a "paused" state, up to a total of ten minutes from
-the approve, and says so once. For a command on your machine it prints
+It then keeps waiting while the turn is paused, or while the cloud step you
+approved is still running, up to a total of ten minutes from the approve,
+and says so once. For a command on your machine it prints
 `waiting — the command is being decided in your other open camy session`.
 For an action in the cloud it prints
 `still running — the reply follows when it finishes`. Both lines appear
@@ -327,6 +328,14 @@ When the write asks for a file mode, a `mode 0755`-style row shows it, with
 the caution `other accounts on this computer could change this file` when
 the mode lets them.
 
+A write camy.ai marks as one to an existing file Camy hasn't read draws the
+read-first card instead, headed `Camy hasn't read <file>`. It shows only the file's path,
+never the contents or a diff, and says
+`The only copy is there — Camy reads it first and shows you the change. Nothing is overwritten blind.`
+Its prompt is `r read it first · N leave it alone`: `r` sends Camy to read
+the file first, and nothing is written from this card; `N`, and anything
+else, `y` included, leaves the file alone.
+
 A local edit, which changes part of an existing file, gets the same body:
 the path, then the diff the edit would make against the copy on disk, under
 the same cap. When that diff can't be computed, for example because a
@@ -353,10 +362,29 @@ What answers it depends on the kind:
 | Approval | `approve? [y/N/o(pen web)]` | `y`/`yes` approves; `o` prints a link to the checkpoint's chat at camy.ai, or to For You when it has no chat (a clickable hyperlink where the terminal supports one), and asks again; an answer with a space in it, such as a sentence, isn't taken as an answer, and the prompt asks again; anything else, including nothing typed, denies. |
 | Approval, a local `run_command` card | `y run · N deny · a always · o web` | as above, plus `a` — see below. |
 | Approval, a local command that would run outside the sandbox | `run it outside the sandbox? type outside to approve, anything else to refuse` | only `outside`, in any case, approves; `y`, `a`, and nothing typed refuse, and no `a` grant is offered. |
-| Approval, a connector write | `approve? [y/N/a(lways for this tool)/o(pen web)]` | as above, plus `a`: it approves and tells Camy to stop asking before that tool runs in that connection, which you can undo in Connections. A destructive tool's card doesn't offer `a`, and a typed `a` there denies. |
+| Approval, a connector write | `approve? [y/N/a(lways for this tool)/o(pen web)]` | as above, plus `a`: it approves and tells Camy to stop asking before that tool runs in that connection, which you can undo in Connections. `a` is offered only where camy.ai accepts it: not on a destructive tool's card, where a typed `a` denies, and not on a write no chat drafted, such as a task's or a call's. |
 | Question | `answer (empty rejects):` | anything typed answers; nothing typed rejects. |
 | Choice | `pick (1 or 1,3) or type — empty rejects:` | a number or comma-separated numbers picks by position, and an option's id or label picks it too; other text is sent as free text; nothing typed rejects. A card takes several picks only when the question asks for several. The prompt offers only what the card takes: `pick (1)` on a card that takes one pick, and no `or type` on one that takes no free text. A number that isn't an option, two picks on a one-pick card, or text the card can't take is refused with the options listed, and the card asks again. |
 | Form | one prompt per field, in order; a card that asks several questions at once is a form with one field per question | a required field re-prompts if left blank; an optional field may be left blank. A value the field can't take, such as a word in a number field (`nan` and `inf` included), prints why and asks for that field again. A field that takes one pick from its options lists them numbered (`pick 1-N`) and asks again for anything else; one that takes several picks or free text shows its options after the question and takes any text. A field that asks for a file is skipped: the terminal can't attach a file to a card. Each answer goes back to its own question. |
+
+When camy.ai sends a question card with several questions, the command
+line asks it one step at a time, each numbered (`1/4`), with two lines of
+keys under the card. Enter sends your answer, and Enter alone takes Camy's pick, the
+choice marked `· Camy's pick`; a number picks a choice; `0` is none of
+these; `?` is I don't know; Ctrl-D closes the card and keeps the answers you
+already gave, and is never a denial; Ctrl-C decides later and leaves the
+card waiting. A key the card doesn't take is left out. A step with no pick
+of Camy's waits for your answer.
+
+A private step, such as a passport number, is typed with nothing shown on
+screen. When it is left waiting, or there is no terminal to ask it on, camy
+points you at the command that asks it again with your typing hidden,
+rather than at `camy approvals answer`, which would show your answer and
+keep it in your shell history:
+
+```text
+still waiting — camy chat attach --chat <chat id> asks it again, with your typing hidden
+```
 
 Prompts read `/dev/tty` directly, never stdin — piping input at a
 [`camy chat`](reference/camy_chat.md) turn (`echo y | camy chat "..."`) can
@@ -426,6 +454,11 @@ process with no controlling terminal. Under `--no-input` or with no
 controlling terminal, a local command that would run without asking at a
 terminal, a verified read or one this project trusts, runs without asking
 too instead of stopping the turn.
+A command camy.ai treats as a read but this computer won't run without
+asking, for example one that reaches outside the project, gets an ordinary
+approval card on camy.ai when there is no terminal to ask on, instead of
+a refusal; [Approved elsewhere](#approved-elsewhere) says where it runs once
+approved.
 
 ```bash
 camy --no-input chat "clean up the build directory"

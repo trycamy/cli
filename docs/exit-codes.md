@@ -60,7 +60,27 @@ gone through); `Camy is not available in your country or region.` and
 not an absolute path; a `--profile` or `CAMY_PROFILE` name that is not a
 plain name (letters, digits, `.`, `_`, `-`); and a
 [`camy inbox reply`](reference/camy_inbox_reply.md) whose drafted reply
-comes back empty (`the draft came back empty`).
+comes back empty (`the draft came back empty`). A command camy.ai refuses
+because AI processing is off for your account says
+`Turn on AI processing to use this.` and exits 1.
+
+From 1.0.7, a command that ran but didn't do its work exits 1 where it
+exited 0 before:
+
+- [`camy canvas domain verify`](reference/camy_canvas_domain_verify.md)
+  until the record is seen, `--json` included.
+- [`camy integrations connect`](reference/camy_integrations_connect.md)
+  when the wait runs out with the account not connected; stopping the
+  wait with Ctrl-C still exits 0.
+- [`camy canvas preview`](reference/camy_canvas_preview.md) when no browser
+  can open (`can't open a browser from here`).
+- [`camy canvas pull`](reference/camy_canvas_pull.md) when every file name
+  in the canvas was refused
+  (`no file written — every name in this canvas was refused`); nothing is
+  written.
+- [`camy feed act`](reference/camy_feed_act.md) on a card already decided
+  somewhere else
+  (`that card was already decided somewhere else — your <action> changed nothing`).
 
 Some runtime errors carry a [diagnosis card](#diagnosis-cards) instead of the
 plain two-line message — `camy update` explaining exactly why it wouldn't
@@ -83,7 +103,16 @@ What exits 2:
 
 - A missing argument, an unknown command, or an unknown flag.
 - A value the CLI rejects before any request goes out — an unparseable
-  `--until`, an `--at` that isn't in the future.
+  `--until`, an `--at` that isn't in the future. From 1.0.7 that includes
+  a word outside the flag's own list for `--color`, `camy jobs` and
+  `camy jobs search` `--status`, and `camy inbox send` `--provider`
+  (`unknown value "<word>" for --<flag>: use …`); a `-L` below 1 on
+  `camy inbox`, `camy chats` and `camy chats list` (`-L must be 1 or more`);
+  an inbox `--cursor` that isn't shaped like one camy.ai hands out
+  (`that cursor is not one camy.ai gave out`); and a
+  [`camy api`](reference/camy_api.md) method other than GET, POST, PUT,
+  PATCH or DELETE, or a body it can't send (`--field` and `--input`
+  together, an `--input` that isn't JSON or is over 10 MiB).
 - A short ID that turns out to match more than one row once the list comes
   back, or a short chat or schedule id that matches none (`no chat
   matches …`, `no schedule matches …`).
@@ -95,7 +124,8 @@ What exits 2:
   it printed the root help and exited 0 before 1.0.6), a
   [`camy vm exec`](reference/camy_vm_exec.md) command over 4,096 characters,
   and a [`camy schedule create`](reference/camy_schedule_create.md) time it
-  can't read whole, such as `9:00pm`.
+  can't read whole, such as `9:00pm`, or, from 1.0.7, a list or range of
+  days such as `mon-fri 09:00`.
 - An account that still owes its month and year of birth: camy.ai refuses
   every command until it is answered in the Camy app or at camy.ai.
 - A [`camy chat`](reference/camy_chat.md) `--attach` that is a folder or a
@@ -103,7 +133,9 @@ What exits 2:
   [`camy inbox reply`](reference/camy_inbox_reply.md) `--send` whose reply
   is empty (an editor you emptied, or a blank `--body`); nothing is queued.
 - A destructive-operation confirmation prompt running headless
-  (`--no-input` or no controlling TTY) without `--force`.
+  (`--no-input` or no controlling TTY) without `--force`. From 1.0.7 that
+  includes `camy inbox reply <id> --send` with neither `--body` nor
+  `--edit` (`send this reply needs confirmation`).
 
 Irreversible operations are stricter: `--force` does not satisfy them.
 Interactively they ask you to type a fixed confirmation word back —
@@ -115,6 +147,14 @@ they exit 2 until you pass that word as `--confirm <word>`.
 
 The stored API key is missing, invalid, or lacks the scope the command
 needs. See [Authentication](authentication.md).
+
+From 1.0.7 also exit 3: a chat message refused because your key lacks a
+scope, which names the scope (it exited 1 before); a key from
+`CAMY_API_KEY` that camy.ai refuses
+(`CAMY_API_KEY was refused by camy.ai: unset it, or use a current key`);
+and a profile named by `--profile`, `CAMY_PROFILE` or `default_profile`
+that this computer doesn't have
+(`no profile named "<name>": camy auth status lists yours`).
 
 Also exit 3, from 1.0.6: an action camy.ai takes only from your signed-in
 Camy app or browser, never with an API key — `… from your signed-in Camy app

@@ -11,6 +11,7 @@ camy api METHOD PATH [flags]
 ```
   camy api GET /v1/jobs --jq '.items[].id'
   camy api POST /v1/tasks --field title="renew passport"
+  camy api POST /v1/tasks --input task.json
   camy api GET /v1/inbox --paginate
 ```
 
@@ -19,6 +20,7 @@ camy api METHOD PATH [flags]
 ```
       --field stringArray   body field k=v (k:=raw for non-strings); repeatable
   -h, --help                help for api
+      --input string        the request body as JSON, read from FILE; - reads stdin
       --paginate            walk limit/offset pages to the end
 ```
 

@@ -25,13 +25,16 @@ instead (`to jordan@acme.com`). With nothing to show it prints
 `inbox zero — nothing here` and exits 0; a filtered view with nothing in
 it says `nothing here — this view is filtered` instead.
 
-The verdict is computed locally from whether the message is read and its
-classification — the list itself carries no separate verdict field:
+When camy.ai marks a row as needing you or not, that mark decides the
+verdict. A row without one is read locally from whether the message is
+read and its classification:
 
-- `!` **needs you** — unread, and not in a bulk class
-- `✓` **handled** — read, and not in a bulk class
+- `!` **needs you** — camy.ai says it needs you; without that answer,
+  unread and not in a bulk class
+- `✓` **handled** — not in a bulk class, and read or not needing you
 - `○` **filed** — classified as newsletter, marketing, automated mail, or
-  similar bulk mail, regardless of read state
+  similar bulk mail, regardless of read state, unless camy.ai says it
+  needs you
 
 Above the list, a count line gives your unread and needs-you totals
 (`3,342 unread · 7 need you`), with `camy inbox --needs-you` at its right
@@ -70,8 +73,10 @@ camy inbox --tab newsletters -L 50
 camy inbox --all
 ```
 
-An unrecognized `--tab` value, or a `-L` above 200 or below zero, is a
-usage error (exit 2) before any request goes out. See
+An unrecognized `--tab` value, a `-L` above 200 or below 1
+(`-L must be 1 or more`), or a `--cursor` that isn't shaped like a
+`next_cursor` camy.ai hands out (`that cursor is not one camy.ai gave out`)
+is a usage error (exit 2) before any request goes out. See
 [camy inbox](reference/camy_inbox.md) for the complete flag reference.
 
 ### Reading a message
@@ -199,7 +204,12 @@ camy inbox reply em_7f31
 ```
 
 With no `--body`, this drafts a reply grounded in the message and prints
-it — nothing is sent. Add `--send` to queue it:
+it — nothing is sent. Add `--send` to queue it. With `--send` but neither
+`--body` nor `--edit`, camy prints the draft and asks
+`send this reply? [y/N]` before queuing it; `--force` skips the question.
+Without a terminal and without `--force`, it exits 2 with
+`send this reply needs confirmation`, and nothing is queued. Under
+`--json` the draft goes to stderr, so stdout stays one JSON value:
 
 ```bash
 camy inbox reply em_7f31 --edit --send
@@ -239,6 +249,11 @@ camy inbox reply em_7f31 --body "sounds good" --send --at 2h
   nothing else in the outbox, as after undoing your only queued reply,
   camy can't tell and still prints `✓ queued for …`, so check
   `camy inbox outbox` yourself.
+- If a reply sent without `--at` fails in a way that may still have
+  reached camy.ai, such as a server error or a dropped connection, the
+  hint says
+  `check camy inbox outbox before retrying — it may already be queued`,
+  so a retry doesn't queue it twice.
 - Under `--json` with no `--send`, the draft path emits
   `{"draft": "…", "sent": false}`; with `--send` you get the server's
   outbox response instead.
@@ -294,7 +309,7 @@ counting on being able to stop a scheduled send.
 | `--body string` | email body (skips `$EDITOR`) |
 | `--edit` | open the body in `$EDITOR` first (Ctrl-C there goes to the editor) |
 | `--cc string`, `--bcc string` | comma-separated addresses |
-| `--provider string` | `gmail` or `outlook`; defaults to your first connected account |
+| `--provider string` | `gmail` or `outlook`; defaults to your first connected account; any other word is a usage error (exit 2) before anything is sent |
 | `--at string` | schedule instead of sending now: a duration or RFC3339 timestamp |
 
 Every send asks for confirmation first — `send to <recipients> now`, or
@@ -509,6 +524,23 @@ Prints the full card: title, type, body, and — when the card offers any —
 one line per available action with its action id and label. Name several
 ids to get a card each.
 
+When the card holds a draft Camy will send for you, `feed show` also prints
+it under `WHAT CAMY WILL SEND`: who it goes to, its subject, and its words,
+with where the draft stands, such as `Review · drafted for you`. While the
+draft can still change, the card offers `edit`:
+
+```bash
+camy feed act 3f2a edit --edit
+camy feed act 3f2a edit --body "Thursday works, see you then."
+```
+
+`edit` rewrites the draft's words, from `--body` or in `$EDITOR` with
+`--edit`, and answers the draft `feed show` printed: if it changed since,
+nothing is rewritten and the command exits 4. `--body` and `--edit` go
+with `edit` only. Sending the draft stays in the Camy app or on the web:
+`camy feed act 3f2a send` exits 3 with
+`Sends to other people can only be approved from your signed-in Camy app or browser, not with an API key`.
+
 See [camy feed show](reference/camy_feed_show.md).
 
 ### Acting on a card
@@ -537,7 +569,11 @@ fails with the server's reason (exit 1) instead of printing ✓. The same
 goes for an approve that failed, expired or was stopped before it ran
 (camy.ai's reason, or `camy.ai couldn't approve that card`). An approve
 camy.ai holds for another check is no ✓ either: it exits 4, with
-`camy feed show` and the card's id as the hint.
+`camy feed show` and the card's id as the hint. A card already decided
+somewhere else, such as in the Camy app, runs nothing and exits 1 with
+`that card was already decided somewhere else — your approve changed nothing`
+(naming the action you pressed); an `edit` of a draft already sent says
+`Already handled — nothing is waiting on you.`
 
 An approve, reject or edit answers the version of the card you were
 shown. When `camy feed show`, or a `--json` listing, printed the card in

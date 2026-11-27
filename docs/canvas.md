@@ -124,7 +124,9 @@ files already written. Two safety rules apply per file:
   (under `--json`, in `skipped` instead), for example
   `skipped 1 file — a path that is empty, absolute, climbs out of ./site, holds a backslash or control character, or names a dotfile other tools act on is never written: "../x"`.
   A name that only contains two dots, such as `jquery..min.js`, is an
-  ordinary file and is written.
+  ordinary file and is written. When every name in the canvas is refused
+  this way, `pull` writes nothing, makes no folder, and exits 1 with
+  `no file written — every name in this canvas was refused`.
 - `pull` never writes through a **symlink**. A destination that already
   exists as one, live or dangling, is refused unconditionally, even with
   `--force`, and so is a symlinked folder already inside `DIR` that a file
@@ -134,8 +136,12 @@ files already written. Two safety rules apply per file:
 
 If any destination already exists as an ordinary file, `pull` refuses the
 whole operation with exit 2 and writes no files; `-f`/`--force` overwrites
-instead. The destination directory itself is created up front, so a refused
-pull can leave it behind, empty.
+instead. Some clashes are refused with exit 2 even with `--force`, again
+before any file is written: an existing directory where a file would go,
+an existing file where a folder would go, and two names in the canvas that
+collide, such as `App.js` and `app.js`, or `a` and `a/b`. The destination
+directory itself is created up front, so a refused pull can leave it
+behind, empty.
 
 `--json`:
 
@@ -165,6 +171,11 @@ code that hasn't been reviewed, executing locally on your machine — it asks
 for confirmation first, worded around exactly that risk. This is one place
 `--force`/`--no-input` genuinely need to mean it: headless without
 `--force` refuses rather than silently opening a browser.
+
+When no browser can open from where you are, such as over SSH or on a
+machine with no display, `preview` exits 1 with
+`can't open a browser from here` and a hint naming the file to open
+yourself.
 
 The temporary directory is left on disk afterward, not cleaned up. It is
 written before the prompt, so declining still leaves that copy on disk.
@@ -398,15 +409,15 @@ camy canvas domain verify SITE
 ```
 
 Checks the pending DNS TXT challenge. The server can answer with an
-ordinary success response that still says "not verified" — a miss doesn't
-have to look like a failure.
+ordinary success response that still says "not verified"; camy reads that
+as a miss.
 
-So read the result, not just whether the command exited cleanly: a genuine
-pass prints an "ok" line naming the verified domain, anything else prints a
-"not yet" line with the reason. Under it come the TXT record name and value
-the service still expects, and a `found` line with any TXT records DNS did
-return, so you can tell a record that hasn't appeared yet from one with the
-wrong value. See
+A genuine pass prints an "ok" line naming the verified domain and exits 0;
+anything else prints a "not yet" line with the reason and exits 1, so a
+script can run it until the record is seen. Under it come the TXT record
+name and value the service still expects, and a `found` line with any TXT
+records DNS did return, so you can tell a record that hasn't appeared yet
+from one with the wrong value. See
 [`camy canvas domain verify`](reference/camy_canvas_domain_verify.md).
 
 ## Access control
@@ -498,6 +509,8 @@ The export downloads to a temporary copy first and is moved into place only
 once it is complete. If that copy is replaced by something else before then,
 `export` refuses to save it and exits 1 with
 `the export's staging file was replaced while it downloaded — not saving it`.
+An export stopped by Ctrl-C, `SIGTERM` or `SIGHUP` removes its temporary
+copy, so no partial file is left behind.
 
 `--json`:
 
@@ -588,7 +601,7 @@ Three fields in those objects are worth naming:
 | --- | --- |
 | `publish` | `site_url` and `files_published` |
 | `access` | `enforcement_ready`, which the human view's NOT ENFORCED warning reads |
-| `domain verify` | `verified` — the one to check, since the command can exit cleanly and still report a domain as unverified |
+| `domain verify` | `verified`; the command exits 1 when it is `false`, after printing the object |
 
 `cat` and `preview` have no `--json` form: `cat` always prints the file
 itself, and `preview` is an interactive action, not a data command.
@@ -612,7 +625,11 @@ itself, and `preview` is an interactive action, not a data command.
 | `publish`, setting a custom domain, or `domain verify` where publishing isn't offered | 1 |
 | An export whose temporary copy was replaced before it was saved | 1 |
 | `pull` or `preview` on an empty canvas (`files` prints the empty note and exits 0) | 1 |
+| `pull` when every filename in the canvas is refused | 1 |
+| A `pull` clash: a directory where a file goes, a file where a folder goes, or two names that collide | 2 |
 | No HTML entry point for `preview` | 1 |
+| `preview` when no browser can open | 1 |
+| `domain verify` until the record is seen | 1 |
 | `sites` or `versions` on a stopped or stopping workspace (when listing would start it) | 7 |
 | `rollback` with no workspace | 7 |
 

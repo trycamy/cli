@@ -22,6 +22,11 @@ the code there. On approval, an expiring, scoped API key lands in your OS
 keychain, or in a locked-down file if no keychain is available. Nothing to
 copy or paste.
 
+From 1.0.7, a QR code of the link is drawn under it, so you can open it on
+your phone instead. It's left out when stderr isn't a terminal, with
+`--accessible`, `CAMY_ACCESSIBLE=1` or `TERM=dumb`, in a locale that isn't
+UTF-8, and in a terminal narrower than 37 columns.
+
 The "signed in" summary — who you are, the key's prefix, its scopes, when
 it expires — prints to stderr, so stdout stays clean if you ever wrap this
 in a script.
