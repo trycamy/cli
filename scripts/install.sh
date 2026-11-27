@@ -52,7 +52,7 @@ MINISIGN_PUB="RWT7bpmBcMfiVQvo6BbIeVDh7f9B8WbapvOEBzs7TxhSkLsjlySfxXG6"
 # floor is what refuses it. It is the PREVIOUS release, not the one shipping:
 # the publish job uploads this script a moment before it flips VERSION, and
 # the floor must not refuse the version still current in that moment.
-MIN_VERSION="1.0.5"
+MIN_VERSION="1.0.6"
 
 # ── terminal colors ────────────────────────────────────────────────────────
 # Color is only ever put on individual words (the "camy" wordmark, a
@@ -166,6 +166,14 @@ main() {
 "*) fail "CAMY_INSTALL_DIR can't contain a quote, \$, a backtick, a backslash or a line break" ;;
   esac
   require_minisign
+  # https is pinned, redirects included, on EVERY download from the channel:
+  # VERSION too (it names the release whose tarball and signed manifest are
+  # then fetched, so a downgraded or redirected VERSION steers the install).
+  # check_dl_base already refused every http base but a loopback one, which
+  # cannot be intercepted and may not speak TLS (a local mirror, the
+  # installer's own test suite).
+  proto_pin="--proto =https --proto-default https --proto-redir =https"
+  case "$DL_BASE" in http://*) proto_pin="" ;; esac
   # the channel's VERSION file names the current release. CAMY_VERSION is the
   # ONE escape hatch (air-gapped mirrors, pinning a known-good build); there is
   # no other fallback, because a version we made up is worse than no install.
@@ -173,7 +181,8 @@ main() {
   if [ -z "$VERSION" ]; then
     # --retry covers 5xx/timeouts mid-release-flip; DNS/connection failures
     # are not "transient" to curl and fall straight through to the message.
-    VERSION=$(curl -fsSL --retry 2 --retry-delay 1 "$DL_BASE/VERSION" 2>/dev/null | tr -cd '0-9a-zA-Z.-' | cut -c1-32)
+    # shellcheck disable=SC2086
+    VERSION=$(curl -fsSL --retry 2 --retry-delay 1 $proto_pin "$DL_BASE/VERSION" 2>/dev/null | tr -cd '0-9a-zA-Z.-' | cut -c1-32)
     # a captive portal or an HTML error body served 200 survives tr as
     # non-empty garbage — require something version-shaped before trusting it
     case "$VERSION" in
@@ -189,14 +198,27 @@ main() {
 
   os=$(uname -s | tr '[:upper:]' '[:lower:]')
   arch=$(uname -m)
+  uname_m=$arch
   case "$os" in
-    darwin|linux) ;;
-    *) fail "unsupported OS '$os' (macOS and Linux today; WSL2 counts)" ;;
+    darwin|linux|freebsd) ;;
+    *) fail "unsupported OS '$os' (macOS, Linux and FreeBSD today; WSL2 counts)" ;;
   esac
+  # uname -m spellings -> the release's GOARCH names. 32-bit ARM ships once,
+  # built for ARMv6, which also runs on ARMv7 and on a 32-bit userland over
+  # a 64-bit kernel (armv8l).
   case "$arch" in
-    arm64|aarch64) arch=arm64 ;;
-    x86_64|amd64)  arch=amd64 ;;
+    arm64|aarch64)              arch=arm64 ;;
+    x86_64|amd64)               arch=amd64 ;;
+    i386|i486|i586|i686)        arch=386 ;;
+    armv6l|armv7l|armv8l)       arch=arm ;;
+    ppc64le|s390x|riscv64)      ;;
     *) fail "unsupported architecture '$arch'" ;;
+  esac
+  # Only the pairs the release builds (.goreleaser.yaml): asking the channel
+  # for any other would end in a 404 that reads like a network fault.
+  case "$os/$arch" in
+    darwin/arm64|darwin/amd64|linux/*|freebsd/arm64|freebsd/amd64) ;;
+    *) fail "unsupported architecture '$uname_m'" ;;
   esac
 
   say ""
@@ -206,12 +228,6 @@ main() {
   tarball="camy_${VERSION}_${os}_${arch}.tar.gz"
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/camy-install.XXXXXX")
   trap 'rm -rf "$tmp"' EXIT INT TERM
-
-  # https is pinned, redirects included. check_dl_base already refused every
-  # http base but a loopback one, which cannot be intercepted and may not
-  # speak TLS (a local mirror, the installer's own test suite).
-  proto_pin="--proto =https --proto-default https --proto-redir =https"
-  case "$DL_BASE" in http://*) proto_pin="" ;; esac
 
   # on a terminal, show curl's own progress bar; otherwise stay silent but
   # still print the reason if the transfer fails (that is what -sS buys)
@@ -243,7 +259,9 @@ main() {
   case "$want" in *[!0-9a-f]*|"") want="" ;; esac
   [ "${#want}" -eq 64 ] || \
     fail "no usable checksum for $tarball in $manifest — refusing to install unverified binaries"
-  got=$( { shasum -a 256 "$tmp/$tarball" 2>/dev/null || sha256sum "$tmp/$tarball" 2>/dev/null; } | awk '{print tolower($1)}')
+  # shasum (macOS, most Linux), sha256sum (coreutils), sha256 -q (FreeBSD base)
+  got=$( { shasum -a 256 "$tmp/$tarball" 2>/dev/null || sha256sum "$tmp/$tarball" 2>/dev/null ||
+           sha256 -q "$tmp/$tarball" 2>/dev/null; } | awk '{print tolower($1)}')
   [ -n "$got" ] || fail "no sha256 tool found (need shasum or sha256sum) — refusing to install unverified binaries"
   [ "$got" = "$want" ] || fail "checksum verification FAILED — not installing"
 
@@ -380,7 +398,12 @@ configure_path() {
   # shellcheck disable=SC2088 # display text, not a path — see above.
   case "$rc" in "$HOME"/*) rc_disp="~/${rc#"$HOME"/}" ;; esac
 
-  if [ -f "$rc" ] && grep -F "$disp" "$rc" >/dev/null 2>&1; then
+  # Only a live line that sets PATH counts. A bare mention
+  # of the folder anywhere used to — the stock oh-my-zsh .zshrc carries it in
+  # a commented-out export — and then nothing was written, so on a Mac where
+  # link_now found no folder already on PATH the next terminal had no camy.
+  if [ -f "$rc" ] && grep -v '^[[:space:]]*#' "$rc" 2>/dev/null | grep -F "$disp" 2>/dev/null \
+       | grep -E '(^|[^A-Za-z0-9_])PATH=|fish_add_path|set[[:space:]].*PATH' >/dev/null 2>&1; then
     row "$OKM" "ready in this terminal" "$now_note · PATH kept in $rc_disp"
     return 0
   fi

@@ -343,7 +343,7 @@ for row in '19-install-dir-shell-code:'"$WORK"'/bin$(touch '"$WORK"'/pwned-19)' 
   fi
 done
 
-# rows 21-26 (CAMY-B20): the signature check is mandatory. They run the
+# rows 21-26: the signature check is mandatory. They run the
 # installer under a PATH that holds the tools it needs and NO minisign, so they
 # behave the same on a host that has minisign and on one that does not.
 NOMS="$WORK/bin-no-minisign"
@@ -430,6 +430,166 @@ run_env "26-https-base-passes-the-gate" 1 "download failed" \
 run_env "26-localhost-loopback-passes-the-gate" 0 "installed" \
   env PATH="$NOMS" CAMY_DL_BASE="http://localhost:$PORT/good" CAMY_INSTALL_DIR="$WORK/install-26b" \
       CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" CAMY_REQUIRE_SIGNATURE=0
+
+# rows 27-28 (platform plan): which tarball each uname pair asks for. A fake
+# uname answers -s and -m from FAKE_UNAME_S / FAKE_UNAME_M; the channel holds
+# one tarball per released pair, so a wrong mapping fails at the download.
+FAKEU="$WORK/bin-fake-uname"
+mkdir -p "$FAKEU"
+cat > "$FAKEU/uname" <<'UNAME'
+#!/bin/sh
+case "$1" in
+  -s) echo "$FAKE_UNAME_S" ;;
+  -m) echo "$FAKE_UNAME_M" ;;
+  *)  echo "$FAKE_UNAME_S" ;;
+esac
+UNAME
+chmod 755 "$FAKEU/uname"
+mkdir -p "$CHAN/plat"
+: > "$CHAN/plat/SHA256SUMS-$VER"
+for p in darwin_arm64 darwin_amd64 linux_arm64 linux_amd64 linux_386 linux_arm \
+         linux_ppc64le linux_s390x linux_riscv64 freebsd_arm64 freebsd_amd64; do
+  t="camy_${VER}_${p}.tar.gz"
+  tar -C "$payload" -czf "$CHAN/plat/$t" camy
+  h=$(shasum -a 256 "$CHAN/plat/$t" 2>/dev/null | awk '{print $1}')
+  [ -n "$h" ] || h=$(sha256sum "$CHAN/plat/$t" | awk '{print $1}')
+  printf '%s  %s\n' "$h" "$t" >> "$CHAN/plat/SHA256SUMS-$VER"
+done
+sign_manifest "$CHAN/plat/SHA256SUMS-$VER"
+
+# run_uname NAME S M WANT_EXIT WANT_GREP
+run_uname() {
+  u_name=$1; u_s=$2; u_m=$3; u_exit=$4; u_grep=$5
+  set -- env PATH="$FAKEU:$PATH" FAKE_UNAME_S="$u_s" FAKE_UNAME_M="$u_m" \
+             CAMY_DL_BASE="http://127.0.0.1:$PORT/plat" CAMY_INSTALL_DIR="$WORK/install-27-$u_name" \
+             CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER"
+  if [ -n "$OPTOUT" ]; then set -- "$@" CAMY_REQUIRE_SIGNATURE=0; fi
+  run_env "27-$u_name" "$u_exit" "$u_grep" "$@"
+}
+run_uname linux-aarch64   Linux   aarch64 0 "camy_${VER}_linux_arm64.tar.gz"
+run_uname linux-x86_64    Linux   x86_64  0 "camy_${VER}_linux_amd64.tar.gz"
+run_uname linux-armv6l    Linux   armv6l  0 "camy_${VER}_linux_arm.tar.gz"
+run_uname linux-armv7l    Linux   armv7l  0 "camy_${VER}_linux_arm.tar.gz"
+run_uname linux-armv8l    Linux   armv8l  0 "camy_${VER}_linux_arm.tar.gz"
+run_uname linux-i686      Linux   i686    0 "camy_${VER}_linux_386.tar.gz"
+run_uname linux-ppc64le   Linux   ppc64le 0 "camy_${VER}_linux_ppc64le.tar.gz"
+run_uname linux-s390x     Linux   s390x   0 "camy_${VER}_linux_s390x.tar.gz"
+run_uname linux-riscv64   Linux   riscv64 0 "camy_${VER}_linux_riscv64.tar.gz"
+run_uname freebsd-amd64   FreeBSD amd64   0 "camy_${VER}_freebsd_amd64.tar.gz"
+run_uname freebsd-arm64   FreeBSD arm64   0 "camy_${VER}_freebsd_arm64.tar.gz"
+run_uname darwin-arm64    Darwin  arm64   0 "camy_${VER}_darwin_arm64.tar.gz"
+run_uname freebsd-i386    FreeBSD i386    1 "unsupported architecture 'i386'"
+run_uname freebsd-armv7   FreeBSD armv7   1 "unsupported architecture 'armv7'"
+run_uname darwin-i386     Darwin  i386    1 "unsupported architecture 'i386'"
+run_uname linux-mips      Linux   mips    1 "unsupported architecture 'mips'"
+run_uname openbsd-amd64   OpenBSD amd64   1 "unsupported OS 'openbsd' (macOS, Linux and FreeBSD today; WSL2 counts)"
+
+# row 28: a host with neither shasum nor sha256sum but FreeBSD's sha256 -q
+# still verifies the checksum (and a wrong digest still fails).
+NOSUM="$WORK/bin-freebsd-sum"
+mkdir -p "$NOSUM"
+for tool in awk basename cat chmod cp cut curl date dirname env find grep gzip head id ln ls mkdir mktemp mv rm rmdir sed sh sleep sort tail tar tr uname wc; do
+  tp=$(command -v "$tool" 2>/dev/null || :)
+  case "$tp" in /*) ln -sf "$tp" "$NOSUM/$tool" ;; esac
+done
+real_shasum=$(command -v shasum 2>/dev/null || :)
+real_sha256sum=$(command -v sha256sum 2>/dev/null || :)
+cat > "$NOSUM/sha256" <<SUM
+#!/bin/sh
+[ "\$1" = "-q" ] || exit 2
+if [ -n "$real_shasum" ]; then "$real_shasum" -a 256 "\$2" | awk '{print \$1}'; else "$real_sha256sum" "\$2" | awk '{print \$1}'; fi
+SUM
+chmod 755 "$NOSUM/sha256"
+run_env "28-freebsd-sha256-verifies" 0 "checksum verified" \
+  env PATH="$NOSUM" CAMY_DL_BASE="http://127.0.0.1:$PORT/good" CAMY_INSTALL_DIR="$WORK/install-28" \
+      CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" CAMY_REQUIRE_SIGNATURE=0
+run_env "28-freebsd-sha256-wrong-digest-fails" 1 "checksum verification FAILED" \
+  env PATH="$NOSUM" CAMY_DL_BASE="http://127.0.0.1:$PORT/r3" CAMY_INSTALL_DIR="$WORK/install-28b" \
+      CAMY_NO_MODIFY_PATH=1 CAMY_VERSION="$VER" CAMY_REQUIRE_SIGNATURE=0
+
+# row 29: every download from the channel pins https, redirects
+# included, VERSION too, and the pin is set before the first of them. The
+# loopback suite above clears the pin (http), so the pin itself is read off
+# the source.
+first_curl=$(grep -n 'curl -f.*DL_BASE/VERSION' "$INSTALLER" | head -1 | cut -d: -f1)
+pin_line=$(grep -n '^  proto_pin="--proto =https' "$INSTALLER" | head -1 | cut -d: -f1)
+# The channel downloads name DL_BASE or the download helper's literal "$2": the
+# pattern is single-quoted so grep sees the dollar sign, not an expansion.
+# shellcheck disable=SC2016
+channel_dl='DL_BASE\|"\$2"'
+unpinned=$(grep 'curl -f' "$INSTALLER" | grep -v '^[[:space:]]*#' | grep -c "$channel_dl" || :)
+pinned=$(grep 'curl -f' "$INSTALLER" | grep -v '^[[:space:]]*#' | grep "$channel_dl" | grep -c 'proto_pin' || :)
+if [ -n "$pin_line" ] && [ -n "$first_curl" ] && [ "$pin_line" -lt "$first_curl" ] && [ "$unpinned" -gt 0 ] && [ "$unpinned" -eq "$pinned" ]; then
+  echo "  ok 29-every-channel-download-pins-https"
+  PASS=$((PASS + 1))
+else
+  echo "  x 29-every-channel-download-pins-https: pin at line '$pin_line', the VERSION fetch at '$first_curl', $pinned of $unpinned channel downloads carry it" >&2
+  FAIL=$((FAIL + 1))
+fi
+
+# rows 30: the PATH line in the shell's rc file. Only a live
+# line that sets PATH counts as already there; a commented-out one (the stock
+# oh-my-zsh .zshrc has "# export PATH=$HOME/bin:$HOME/.local/bin:...") or one
+# that merely names the folder used to, and then nothing was written. PATH
+# holds only the tools ($NOMS), so link_now finds no folder to link into and
+# the rc line is the whole answer — and nothing outside $WORK is touched.
+# path_row NAME SHELL RC_REL WANT CONTENT: WANT is "added" or "kept".
+path_row() {
+  name=$1; sh_path=$2; rc_rel=$3; want=$4; content=$5
+  home="$WORK/home-$name"
+  mkdir -p "$home/.local/bin" "$(dirname "$home/$rc_rel")"
+  printf '%s\n' "$content" > "$home/$rc_rel"
+  out="$WORK/out-$name"
+  got_exit=0
+  env PATH="$NOMS" HOME="$home" SHELL="$sh_path" ZDOTDIR="" XDG_CONFIG_HOME="" \
+      CAMY_DL_BASE="http://127.0.0.1:$PORT/good" CAMY_INSTALL_DIR="$home/.local/bin" \
+      CAMY_VERSION="$VER" CAMY_REQUIRE_SIGNATURE=0 \
+    sh "$INSTALLER" >"$out" 2>&1 || got_exit=$?
+  added=$(grep -c '^# camy CLI (added by the installer)$' "$home/$rc_rel" || :)
+  ok=1
+  [ "$got_exit" = 0 ] || ok=0
+  case "$want" in
+    added) said="PATH added to ~/$rc_rel"; want_lines=1 ;;
+    *)     said="PATH kept in ~/$rc_rel"; want_lines=0 ;;
+  esac
+  grep -qF "$said" "$out" || ok=0
+  [ "$added" = "$want_lines" ] || ok=0
+  if [ "$ok" = 1 ]; then
+    echo "  ok $name"
+    PASS=$((PASS + 1))
+  else
+    echo "  x $name: exit $got_exit, want PATH $want, $added installer lines in ~/$rc_rel" >&2
+    sed 's/^/      | /' "$out" >&2
+    sed 's/^/      rc| /' "$home/$rc_rel" >&2
+    FAIL=$((FAIL + 1))
+  fi
+}
+# The rc contents are the literal lines a shell file holds: the dollar signs
+# are meant for the shell that later reads the file, not for this one.
+# shellcheck disable=SC2016
+path_row "30-zsh-commented-export-is-not-a-path-line" /bin/zsh .zshrc added \
+  '# export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH'
+# shellcheck disable=SC2016
+path_row "30-zsh-indented-comment-is-not-a-path-line" /bin/zsh .zshrc added \
+  '    #export PATH="$HOME/.local/bin:$PATH"'
+# shellcheck disable=SC2016
+path_row "30-zsh-line-that-only-names-the-folder" /bin/zsh .zshrc added \
+  'alias lb="ls $HOME/.local/bin"'
+# shellcheck disable=SC2016
+path_row "30-zsh-live-export-is-kept" /bin/zsh .zshrc kept \
+  'export PATH="$HOME/.local/bin:$PATH"'
+# bash's rc is ~/.bash_profile on macOS (Terminal.app runs a login shell)
+bash_rc=.bashrc
+if [ "$OS" = darwin ]; then bash_rc=.bash_profile; fi
+# shellcheck disable=SC2016
+path_row "30-bash-live-path-line-is-kept" /bin/bash "$bash_rc" kept \
+  'PATH="$HOME/.local/bin:$PATH"; export PATH'
+# shellcheck disable=SC2016
+path_row "30-fish-commented-add-path-is-not-a-path-line" /usr/bin/fish .config/fish/config.fish added \
+  '# fish_add_path "$HOME/.local/bin"'
+# shellcheck disable=SC2016
+path_row "30-fish-live-add-path-is-kept" /usr/bin/fish .config/fish/config.fish kept \
+  'fish_add_path "$HOME/.local/bin"'
 
 echo ""
 echo "$PASS passed, $FAIL failed"
